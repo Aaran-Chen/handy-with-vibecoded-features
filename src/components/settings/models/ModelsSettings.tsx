@@ -212,6 +212,10 @@ export const ModelsSettings: React.FC = () => {
         speedScore: m.speed_score,
         accuracyScore: m.accuracy_score,
         vramNeedMb: m.size_mb,
+        // GGUF models run on the GPU (Vulkan); ONNX engines are CPU-only on
+        // Windows, so only TranscribeCpp models scale with the GPU.
+        gpuCapable: m.engine_type === "TranscribeCpp",
+        languageCount: m.supported_languages.length,
       }));
     return recommendModels(candidates, capability);
   }, [models, languageFilter, capability]);
