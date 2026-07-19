@@ -1862,6 +1862,16 @@ fn cached_gpu_devices() -> &'static [GpuDeviceOption] {
     })
 }
 
+/// Largest GPU VRAM (MB) among registered compute devices, 0 if none/unreported.
+/// Cheap: reuses the cached device list, no ORT enumeration.
+pub fn max_gpu_vram_mb() -> usize {
+    cached_gpu_devices()
+        .iter()
+        .map(|d| d.total_vram_mb)
+        .max()
+        .unwrap_or(0)
+}
+
 #[derive(Serialize, Clone, Debug, Type)]
 pub struct AvailableAccelerators {
     pub transcribe: Vec<String>,

@@ -216,6 +216,38 @@ async changeAlwaysPostProcessSetting(enabled: boolean) : Promise<Result<null, st
     else return { status: "error", error: e  as any };
 }
 },
+async getSystemCapability() : Promise<Result<SystemCapability, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_system_capability") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getPostProcessModelCatalog() : Promise<Result<PostProcessCatalogModel[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_post_process_model_catalog") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async pullPostProcessModel(model: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pull_post_process_model", { model }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deletePostProcessModel(model: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_post_process_model", { model }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async changeExperimentalEnabledSetting(enabled: boolean) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("change_experimental_enabled_setting", { enabled }) };
@@ -969,6 +1001,8 @@ export type ToneRule = { id: string; pattern: string; tone: string }
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
 export type ModelInfo = { id: string; name: string; description: string; filename: string; source: ModelSource; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number; supports_translation: boolean; is_recommended: boolean; supported_languages: string[]; supports_language_selection: boolean; is_custom: boolean; supports_streaming: boolean; supports_language_detection: boolean }
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
+export type SystemCapability = { vram_mb: number; ram_mb: number; has_gpu: boolean }
+export type PostProcessCatalogModel = { id: string; name: string; params: string; description: string; size_mb: number; vram_need_mb: number; speed_score: number; accuracy_score: number; is_installed: boolean }
 /**
  * Where a model comes from and how Handy obtains it — the routing discriminant
  * for downloading and on-disk resolution.

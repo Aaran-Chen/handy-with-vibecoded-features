@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, Globe, RefreshCw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  Cpu,
+  Gauge,
+  Globe,
+  RefreshCw,
+  Search,
+  Zap,
+} from "lucide-react";
 import type { ModelCardStatus } from "@/components/onboarding";
 import { ModelCard } from "@/components/onboarding";
 import { useModelStore } from "@/stores/modelStore";
@@ -10,7 +18,9 @@ import {
   MODEL_CAPABILITY_LANGUAGES,
   supportsLanguageCode,
 } from "@/lib/constants/languages.ts";
-import type { ModelInfo } from "@/bindings";
+import { commands, type ModelInfo, type SystemCapability } from "@/bindings";
+import { recommendModels } from "@/lib/utils/recommend";
+import { PostProcessModelsSection } from "./PostProcessModelsSection";
 
 // check if model supports a language based on its supported_languages list
 const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
@@ -30,8 +40,15 @@ export const ModelsSettings: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState("all");
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
+  const [capability, setCapability] = useState<SystemCapability | null>(null);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const languageSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    commands.getSystemCapability().then((res) => {
+      if (res.status === "ok") setCapability(res.data);
+    });
+  }, []);
   const {
     models,
     currentModel,
@@ -181,6 +198,60 @@ export const ModelsSettings: React.FC = () => {
     });
   }, [models, languageFilter, searchQuery]);
 
+  // Machine-aware recommendations over the (language-filtered) catalog.
+  // Uses each model's size as a rough memory-need proxy.
+  const recommendations = useMemo(() => {
+    const candidates = models
+      .filter((m) => !isLegacyModel(m))
+      .filter(
+        (m) =>
+          languageFilter === "all" || modelSupportsLanguage(m, languageFilter),
+      )
+      .map((m) => ({
+        id: m.id,
+        speedScore: m.speed_score,
+        accuracyScore: m.accuracy_score,
+        vramNeedMb: m.size_mb,
+      }));
+    return recommendModels(candidates, capability);
+  }, [models, languageFilter, capability]);
+
+  const recoChips = useMemo(() => {
+    const seen = new Set<string>();
+    const chips: {
+      key: string;
+      label: string;
+      Icon: typeof Cpu;
+      model: ModelInfo;
+    }[] = [];
+    const add = (
+      id: string | null,
+      key: string,
+      label: string,
+      Icon: typeof Cpu,
+    ) => {
+      if (!id || seen.has(id)) return;
+      const model = models.find((m) => m.id === id);
+      if (!model) return;
+      seen.add(id);
+      chips.push({ key, label, Icon, model });
+    };
+    add(
+      recommendations.machine,
+      "machine",
+      t("settings.models.reco.machine"),
+      Cpu,
+    );
+    add(
+      recommendations.accuracy,
+      "accuracy",
+      t("settings.models.reco.accuracy"),
+      Gauge,
+    );
+    add(recommendations.speed, "speed", t("settings.models.reco.speed"), Zap);
+    return chips;
+  }, [recommendations, models, t]);
+
   // Split filtered models into downloaded (including custom) and available sections
   const { downloadedModels, availableModels } = useMemo(() => {
     const downloaded: ModelInfo[] = [];
@@ -245,6 +316,59 @@ export const ModelsSettings: React.FC = () => {
           className="w-full pl-9 pr-3 py-2 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-logo-primary placeholder:text-text/40"
         />
       </div>
+
+      {/* Machine-aware recommendations */}
+      {recoChips.length > 0 && (
+        <div className="p-3 rounded-lg bg-logo-primary/5 border border-logo-primary/20">
+          <div className="text-xs font-medium text-text/60 mb-2">
+            {capability?.has_gpu
+              ? t("settings.models.reco.titleGpu", {
+                  vram: `${(capability.vram_mb / 1024).toFixed(0)} GB`,
+                })
+              : t("settings.models.reco.title")}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recoChips.map(({ key, label, Icon, model }) => {
+              const downloaded = model.is_downloaded || model.is_custom;
+              const isActive = model.id === currentModel;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() =>
+                    downloaded
+                      ? handleModelSelect(model.id)
+                      : handleModelDownload(model.id)
+                  }
+                  disabled={isActive}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-colors ${
+                    isActive
+                      ? "border-logo-primary bg-logo-primary/10 cursor-default"
+                      : "border-mid-gray/40 bg-background hover:bg-mid-gray/10"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 text-logo-primary shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-[10px] uppercase tracking-wide text-text/50">
+                      {label}
+                    </span>
+                    <span className="block text-sm font-medium truncate max-w-[160px]">
+                      {model.name}
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-text/50 ml-1 shrink-0">
+                    {isActive
+                      ? t("settings.models.reco.current")
+                      : downloaded
+                        ? t("settings.models.reco.use")
+                        : t("settings.models.reco.get")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {filteredModels.length > 0 ? (
         <div className="space-y-6">
@@ -408,6 +532,11 @@ export const ModelsSettings: React.FC = () => {
           {t("settings.models.noModelsMatch")}
         </div>
       )}
+
+      {/* Post-processing (AI cleanup) models */}
+      <div className="pt-6 mt-2 border-t border-mid-gray/30">
+        <PostProcessModelsSection />
+      </div>
     </div>
   );
 };

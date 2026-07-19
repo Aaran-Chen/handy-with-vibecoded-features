@@ -214,7 +214,32 @@
         "label": "Rescan",
         "tooltip": "Rescan for models added to the models folder or Hugging Face cache outside Handy"
       },
-      "noModelsMatch": "No models match this filter."
+      "noModelsMatch": "No models match this filter.",
+      "reco": {
+        "title": "Recommended for you",
+        "titleGpu": "Recommended for your {{vram}} GPU",
+        "machine": "For your machine",
+        "accuracy": "Best accuracy",
+        "speed": "Fastest",
+        "use": "Use",
+        "get": "Download",
+        "current": "In use"
+      },
+      "postProcess": {
+        "title": "Post-processing models (AI cleanup)",
+        "description": "Download a local AI model to clean up and tone-adapt your transcripts.",
+        "machineLine": "Recommendations tuned to your {{hardware}}. All run locally through Ollama.",
+        "notOllama": "Post-processing model downloads require the local Ollama provider. Set the provider to Custom (http://localhost:11434/v1) in the Post Process tab.",
+        "badgeMachine": "For your machine",
+        "badgeSpeed": "Fastest",
+        "badgeAccuracy": "Most accurate",
+        "use": "Use",
+        "download": "Download",
+        "active": "In use",
+        "starting": "Starting…",
+        "mayBeSlow": "may exceed your memory",
+        "downloaded": "Downloaded {{model}}"
+      }
     },
     "sound": {
       "title": "Sound",

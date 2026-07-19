@@ -114,6 +114,8 @@ windows = { version = "0.61.3", features = [
   "Win32_System_Com",
   "Win32_System_Ole",
   "Win32_UI_Accessibility",
+  # System RAM detection for model recommendations
+  "Win32_System_SystemInformation",
 ] }
 winreg = "0.55"
 
