@@ -42,6 +42,42 @@ use crate::settings::{self, get_settings, ShortcutBinding};
 
 use super::handler::handle_shortcut_event;
 
+/// Nudge the handy-keys listener thread to re-install its low-level hooks.
+///
+/// Windows silently removes a low-level keyboard hook whose callback exceeds
+/// the system hook timeout (~200ms under load) — the app keeps running with
+/// dead hotkeys while the tray icon looks healthy. handy-keys re-installs its
+/// hooks on session unlock/resume, and its watcher window treats a posted
+/// WM_WTSSESSION_CHANGE + WTS_SESSION_UNLOCK exactly like a real unlock
+/// (reconcile modifiers + re-install hooks). Posting that message is harmless
+/// when the hooks are healthy and a fix when they are dead, so the app nudges
+/// it on main-window close and from a periodic watchdog.
+#[cfg(windows)]
+pub fn nudge_hook_reinstall() {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, PostMessageW};
+    // Values from the Windows SDK; not exposed by the handy-keys API.
+    const WM_WTSSESSION_CHANGE: u32 = 0x02B1;
+    const WTS_SESSION_UNLOCK: usize = 0x8;
+    let class: Vec<u16> = "HandyKeysSystemWatcher\0".encode_utf16().collect();
+    unsafe {
+        if let Ok(hwnd) = FindWindowW(PCWSTR(class.as_ptr()), PCWSTR::null()) {
+            if !hwnd.is_invalid() {
+                let _ = PostMessageW(
+                    Some(hwnd),
+                    WM_WTSSESSION_CHANGE,
+                    WPARAM(WTS_SESSION_UNLOCK),
+                    LPARAM(0),
+                );
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn nudge_hook_reinstall() {}
+
 /// Commands that can be sent to the hotkey manager thread
 enum ManagerCommand {
     Register {

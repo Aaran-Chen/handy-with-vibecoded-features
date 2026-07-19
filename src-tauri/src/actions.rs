@@ -314,6 +314,13 @@ async fn post_process_transcription(
     // - custom: top-level reasoning_effort (works for local OpenAI-compat servers)
     // - openrouter: nested reasoning object; exclude:true also keeps reasoning text
     //   out of the response so it can't pollute structured-output JSON parsing
+    // Low temperature keeps cleanup deterministic and faithful; only sent to
+    // the custom/local provider since some hosted models reject it.
+    let temperature = if provider.id == "custom" {
+        Some(0.2)
+    } else {
+        None
+    };
     let (reasoning_effort, reasoning) = match provider.id.as_str() {
         "custom" => (Some("none".to_string()), None),
         "openrouter" => (
@@ -401,6 +408,7 @@ async fn post_process_transcription(
             Some(json_schema),
             reasoning_effort.clone(),
             reasoning.clone(),
+            temperature,
         )
         .await
         {
@@ -461,6 +469,7 @@ async fn post_process_transcription(
         processed_prompt,
         reasoning_effort,
         reasoning,
+        temperature,
     )
     .await
     {

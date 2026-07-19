@@ -42,6 +42,11 @@ struct ChatCompletionRequest {
     reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<ReasoningConfig>,
+    /// Low temperature makes transcript cleanup deterministic and faithful.
+    /// Only sent for providers known to accept it (local/custom), since some
+    /// hosted reasoning models reject non-default temperatures.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,6 +120,7 @@ pub async fn send_chat_completion(
     prompt: String,
     reasoning_effort: Option<String>,
     reasoning: Option<ReasoningConfig>,
+    temperature: Option<f32>,
 ) -> Result<Option<String>, String> {
     send_chat_completion_with_schema(
         provider,
@@ -125,6 +131,7 @@ pub async fn send_chat_completion(
         None,
         reasoning_effort,
         reasoning,
+        temperature,
     )
     .await
 }
@@ -144,6 +151,7 @@ pub async fn send_chat_completion_with_schema(
     json_schema: Option<Value>,
     reasoning_effort: Option<String>,
     reasoning: Option<ReasoningConfig>,
+    temperature: Option<f32>,
 ) -> Result<Option<String>, String> {
     let base_url = provider.base_url.trim_end_matches('/');
     let url = format!("{}/chat/completions", base_url);
@@ -185,6 +193,7 @@ pub async fn send_chat_completion_with_schema(
         response_format,
         reasoning_effort,
         reasoning,
+        temperature,
     };
 
     let response = client

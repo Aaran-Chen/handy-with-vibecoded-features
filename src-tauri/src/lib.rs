@@ -868,6 +868,16 @@ pub fn run(cli_args: CliArgs) {
                 let _ = crate::managers::transcription::get_available_accelerators();
             });
 
+            // Hook-health watchdog: Windows silently removes low-level
+            // keyboard hooks whose callbacks exceed the system timeout,
+            // leaving the app alive in the tray with dead hotkeys. Nudging a
+            // re-install is a no-op when the hooks are healthy, so re-arm
+            // them periodically.
+            std::thread::spawn(|| loop {
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                shortcut::handy_keys::nudge_hook_reinstall();
+            });
+
             // Hide tray icon if --no-tray was passed
             if cli_args.no_tray {
                 tray::set_tray_visibility(&app_handle, false);
@@ -892,6 +902,12 @@ pub fn run(cli_args: CliArgs) {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _res = window.hide();
+
+                // Closing the window has been observed to coincide with
+                // Windows silently dropping the low-level keyboard hooks
+                // (hotkeys dead, app alive in the tray). Nudge a re-install;
+                // harmless when the hooks are healthy.
+                shortcut::handy_keys::nudge_hook_reinstall();
 
                 #[cfg(target_os = "macos")]
                 {
