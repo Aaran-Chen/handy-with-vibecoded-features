@@ -576,6 +576,15 @@ pub(crate) async fn process_transcription_output(
     }
 }
 
+impl TranscribeAction {
+    /// Whether this run should post-process: either the dedicated
+    /// post-process hotkey fired, or the user enabled "always post-process"
+    /// so plain transcription cleans up too.
+    fn wants_post_process(&self, app: &AppHandle) -> bool {
+        self.post_process || get_settings(app).always_post_process
+    }
+}
+
 impl ShortcutAction for TranscribeAction {
     fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
         let start_time = Instant::now();
@@ -584,7 +593,7 @@ impl ShortcutAction for TranscribeAction {
         // Capture where the user is dictating (foreground app / website) so
         // post-processing can adapt tone. Runs on a background thread, so it
         // adds no keypress latency.
-        if self.post_process {
+        if self.wants_post_process(app) {
             crate::app_context::refresh_async();
         }
 
@@ -743,7 +752,7 @@ impl ShortcutAction for TranscribeAction {
         // Re-capture the destination: in toggle mode the recording can be
         // long and focus may have moved since start. Paste targets the
         // foreground window at stop, so this capture is the accurate one.
-        if self.post_process {
+        if self.wants_post_process(app) {
             crate::app_context::refresh_async();
         }
 
@@ -774,7 +783,7 @@ impl ShortcutAction for TranscribeAction {
         play_feedback_sound(app, SoundType::Stop);
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
-        let post_process = self.post_process;
+        let post_process = self.wants_post_process(app);
         let cancel_generation = rm.cancel_generation();
 
         tauri::async_runtime::spawn(async move {

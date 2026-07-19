@@ -544,6 +544,30 @@ const ContextAwarenessComponent: React.FC = () => {
 export const ContextAwarenessSettings = React.memo(ContextAwarenessComponent);
 ContextAwarenessSettings.displayName = "ContextAwarenessSettings";
 
+const AutomaticPostProcessToggleComponent: React.FC = () => {
+  const { t } = useTranslation();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
+
+  const enabled = getSetting("always_post_process") ?? false;
+
+  return (
+    <ToggleSwitch
+      checked={enabled}
+      onChange={(value) => updateSetting("always_post_process", value)}
+      isUpdating={isUpdating("always_post_process")}
+      label={t("settings.postProcessing.automatic.toggle.label")}
+      description={t("settings.postProcessing.automatic.toggle.description")}
+      descriptionMode="tooltip"
+      grouped={true}
+    />
+  );
+};
+
+export const AutomaticPostProcessToggle = React.memo(
+  AutomaticPostProcessToggleComponent,
+);
+AutomaticPostProcessToggle.displayName = "AutomaticPostProcessToggle";
+
 export const PostProcessingSettingsApi = React.memo(
   PostProcessingSettingsApiComponent,
 );
@@ -565,6 +589,10 @@ export const PostProcessingSettings: React.FC = () => {
           descriptionMode="tooltip"
           grouped={true}
         />
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.postProcessing.automatic.title")}>
+        <AutomaticPostProcessToggle />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.postProcessing.api.title")}>

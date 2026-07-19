@@ -373,6 +373,13 @@
       "hotkey": {
         "title": "Hotkey"
       },
+      "automatic": {
+        "title": "Automatic",
+        "toggle": {
+          "label": "Post-process every transcription",
+          "description": "Run the AI cleanup and context-aware tone pass on ordinary dictation too, so you don't need the separate post-processing hotkey. Adds the model's processing time to each transcription."
+        }
+      },
       "context": {
         "title": "Context Awareness",
         "toggle": {
