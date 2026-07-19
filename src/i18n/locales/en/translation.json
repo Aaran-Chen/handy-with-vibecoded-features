@@ -373,6 +373,22 @@
       "hotkey": {
         "title": "Hotkey"
       },
+      "context": {
+        "title": "Context Awareness",
+        "toggle": {
+          "label": "Adapt tone to destination",
+          "description": "Detects the app or website you are dictating into and asks the post-processing model to match its tone — formal for email and documents, casual for chats. Detection happens entirely on this device."
+        },
+        "rules": {
+          "title": "Tone rules",
+          "description": "The first matching rule wins. Patterns are matched against the app name, process name, and website domain. Tone can be a preset (formal, casual, technical) or any custom instruction.",
+          "patternPlaceholder": "e.g. mail.google.com or discord",
+          "tonePlaceholder": "formal, casual, technical, or custom",
+          "add": "Add rule",
+          "remove": "Remove rule",
+          "empty": "No rules yet — the model will pick a tone automatically from the detected app."
+        }
+      },
       "api": {
         "title": "API (OpenAI Compatible)",
         "provider": {

@@ -93,6 +93,18 @@ pub struct LLMPrompt {
     pub prompt: String,
 }
 
+/// Maps a dictation destination (app or website) to a tone for post-processing.
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct ToneRule {
+    pub id: String,
+    /// Substring matched case-insensitively against the foreground app's
+    /// process name, friendly name, or website domain.
+    pub pattern: String,
+    /// A preset ("formal", "casual", "technical") or free-text tone
+    /// instruction passed to the post-processing prompt.
+    pub tone: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct PostProcessProvider {
     pub id: String,
@@ -423,6 +435,10 @@ pub struct AppSettings {
     pub post_process_prompts: Vec<LLMPrompt>,
     #[serde(default)]
     pub post_process_selected_prompt_id: Option<String>,
+    #[serde(default = "default_context_aware_enabled")]
+    pub context_aware_enabled: bool,
+    #[serde(default = "default_context_tone_rules")]
+    pub context_tone_rules: Vec<ToneRule>,
     #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
@@ -718,6 +734,43 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
     }]
 }
 
+fn default_context_aware_enabled() -> bool {
+    true
+}
+
+fn default_context_tone_rules() -> Vec<ToneRule> {
+    fn rule(id: &str, pattern: &str, tone: &str) -> ToneRule {
+        ToneRule {
+            id: id.to_string(),
+            pattern: pattern.to_string(),
+            tone: tone.to_string(),
+        }
+    }
+    vec![
+        rule("formal_gmail", "mail.google.com", "formal"),
+        rule("formal_outlook", "outlook", "formal"),
+        rule("formal_gdocs", "docs.google.com", "formal"),
+        rule("formal_linkedin", "linkedin.com", "formal"),
+        rule("formal_word", "winword", "formal"),
+        rule("formal_notion", "notion", "formal"),
+        rule("formal_thunderbird", "thunderbird", "formal"),
+        rule("casual_discord", "discord", "casual"),
+        rule("casual_slack", "slack", "casual"),
+        rule("casual_whatsapp", "whatsapp", "casual"),
+        rule("casual_reddit", "reddit.com", "casual"),
+        rule("casual_x", "x.com", "casual"),
+        rule("casual_twitter", "twitter.com", "casual"),
+        rule("casual_instagram", "instagram.com", "casual"),
+        rule("casual_telegram", "telegram", "casual"),
+        rule("casual_messenger", "messenger.com", "casual"),
+        rule("casual_youtube", "youtube.com", "casual"),
+        rule("technical_vscode", "visual studio code", "technical"),
+        rule("technical_cursor", "cursor", "technical"),
+        rule("technical_github", "github.com", "technical"),
+        rule("technical_terminal", "terminal", "technical"),
+    ]
+}
+
 fn default_transcribe_gpu_device() -> i32 {
     -1 // auto
 }
@@ -875,6 +928,8 @@ pub fn get_default_settings() -> AppSettings {
         post_process_models: default_post_process_models(),
         post_process_prompts: default_post_process_prompts(),
         post_process_selected_prompt_id: None,
+        context_aware_enabled: default_context_aware_enabled(),
+        context_tone_rules: default_context_tone_rules(),
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),

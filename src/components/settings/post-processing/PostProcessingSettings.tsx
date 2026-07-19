@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { RefreshCcw } from "lucide-react";
-import { commands } from "@/bindings";
+import { RefreshCcw, Trash2 } from "lucide-react";
+import { commands, type ToneRule } from "@/bindings";
 
 import { Alert } from "../../ui/Alert";
 import {
@@ -20,6 +20,7 @@ import { ApiKeyField } from "../PostProcessingSettingsApi/ApiKeyField";
 import { ModelSelect } from "../PostProcessingSettingsApi/ModelSelect";
 import { usePostProcessProviderState } from "../PostProcessingSettingsApi/usePostProcessProviderState";
 import { ShortcutInput } from "../ShortcutInput";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { useSettings } from "../../../hooks/useSettings";
 
 const PostProcessingSettingsApiComponent: React.FC = () => {
@@ -414,6 +415,135 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
   );
 };
 
+const ContextAwarenessComponent: React.FC = () => {
+  const { t } = useTranslation();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
+
+  const enabled = getSetting("context_aware_enabled") ?? true;
+  const savedRules = getSetting("context_tone_rules") || [];
+  const [draftRules, setDraftRules] = useState<ToneRule[]>(savedRules);
+  // True while an input holds uncommitted keystrokes (committed onBlur).
+  const dirtyRef = React.useRef(false);
+
+  // Adopt external changes (initial load, backend refresh) — but never while
+  // the user has uncommitted typing, which the refresh would silently wipe.
+  const savedKey = JSON.stringify(savedRules);
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setDraftRules(JSON.parse(savedKey));
+  }, [savedKey]);
+
+  const commitRules = (rules: ToneRule[]) => {
+    dirtyRef.current = false;
+    updateSetting("context_tone_rules", rules);
+  };
+
+  const handleRuleChange = (
+    index: number,
+    field: "pattern" | "tone",
+    value: string,
+  ) => {
+    dirtyRef.current = true;
+    setDraftRules((rules) =>
+      rules.map((rule, i) =>
+        i === index ? { ...rule, [field]: value } : rule,
+      ),
+    );
+  };
+
+  const handleAddRule = () => {
+    const next = [
+      ...draftRules,
+      { id: crypto.randomUUID(), pattern: "", tone: "casual" },
+    ];
+    setDraftRules(next);
+    commitRules(next);
+  };
+
+  const handleRemoveRule = (index: number) => {
+    const next = draftRules.filter((_, i) => i !== index);
+    setDraftRules(next);
+    commitRules(next);
+  };
+
+  return (
+    <>
+      <ToggleSwitch
+        checked={enabled}
+        onChange={(value) => updateSetting("context_aware_enabled", value)}
+        isUpdating={isUpdating("context_aware_enabled")}
+        label={t("settings.postProcessing.context.toggle.label")}
+        description={t("settings.postProcessing.context.toggle.description")}
+        descriptionMode="tooltip"
+        grouped={true}
+      />
+
+      {enabled && (
+        <SettingContainer
+          title={t("settings.postProcessing.context.rules.title")}
+          description={t("settings.postProcessing.context.rules.description")}
+          descriptionMode="tooltip"
+          layout="stacked"
+          grouped={true}
+        >
+          <div className="space-y-2">
+            {draftRules.length === 0 && (
+              <p className="text-sm text-mid-gray">
+                {t("settings.postProcessing.context.rules.empty")}
+              </p>
+            )}
+            {draftRules.map((rule, index) => (
+              <div key={rule.id} className="flex gap-2 items-center min-w-0">
+                <Input
+                  type="text"
+                  value={rule.pattern}
+                  onChange={(e) =>
+                    handleRuleChange(index, "pattern", e.target.value)
+                  }
+                  onBlur={() => commitRules(draftRules)}
+                  placeholder={t(
+                    "settings.postProcessing.context.rules.patternPlaceholder",
+                  )}
+                  variant="compact"
+                  className="flex-1 min-w-0"
+                />
+                <Input
+                  type="text"
+                  value={rule.tone}
+                  onChange={(e) =>
+                    handleRuleChange(index, "tone", e.target.value)
+                  }
+                  onBlur={() => commitRules(draftRules)}
+                  placeholder={t(
+                    "settings.postProcessing.context.rules.tonePlaceholder",
+                  )}
+                  variant="compact"
+                  className="flex-1 min-w-0"
+                />
+                <Button
+                  onClick={() => handleRemoveRule(index)}
+                  variant="secondary"
+                  size="md"
+                  className="shrink-0"
+                  aria-label={t("settings.postProcessing.context.rules.remove")}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button onClick={handleAddRule} variant="primary" size="md">
+              {t("settings.postProcessing.context.rules.add")}
+            </Button>
+          </div>
+        </SettingContainer>
+      )}
+    </>
+  );
+};
+
+export const ContextAwarenessSettings = React.memo(ContextAwarenessComponent);
+ContextAwarenessSettings.displayName = "ContextAwarenessSettings";
+
 export const PostProcessingSettingsApi = React.memo(
   PostProcessingSettingsApiComponent,
 );
@@ -443,6 +573,10 @@ export const PostProcessingSettings: React.FC = () => {
 
       <SettingsGroup title={t("settings.postProcessing.prompts.title")}>
         <PostProcessingSettingsPrompts />
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.postProcessing.context.title")}>
+        <ContextAwarenessSettings />
       </SettingsGroup>
     </div>
   );

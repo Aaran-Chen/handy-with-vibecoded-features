@@ -93,8 +93,11 @@ pub async fn retry_history_entry_transcription(
         return Err("Recording contains no speech".to_string());
     }
 
+    // apply_app_context=false: the retried entry's original destination is
+    // unknown, and the global capture describes a past, unrelated dictation.
     let processed =
-        process_transcription_output(&app, &transcription, entry.post_process_requested).await;
+        process_transcription_output(&app, &transcription, entry.post_process_requested, false)
+            .await;
     history_manager
         .update_transcription(
             id,
