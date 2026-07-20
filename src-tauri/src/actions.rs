@@ -140,22 +140,23 @@ fn should_use_streaming_overlay(style: OverlayStyle, is_streaming: bool) -> bool
     style == OverlayStyle::Live && is_streaming
 }
 
-/// Translate a tone-rule value into a concrete instruction for the LLM.
-/// Presets get curated instructions; anything else is passed through as a
-/// custom instruction.
-fn tone_instruction(tone: &str) -> String {
-    match tone.trim().to_lowercase().as_str() {
-        "formal" => "Formal and professional: complete sentences, proper punctuation and \
-                     capitalization, no slang or casual abbreviations."
-            .to_string(),
-        "casual" => "Casual and relaxed: conversational wording, contractions are fine, keep it \
-                     light and natural."
-            .to_string(),
-        "technical" => "Concise and technical: preserve code identifiers, commands, and precise \
-                        terminology exactly as spoken."
-            .to_string(),
-        _ => tone.trim().to_string(),
+/// Translate a tone-rule value into a concrete instruction for the LLM: a
+/// preset id resolves to that preset's (user-editable) instruction; anything
+/// else is passed through as a custom free-text instruction. Falls back to
+/// the shipped defaults when a legacy rule references a preset the user's
+/// stored preset list doesn't have.
+fn tone_instruction(settings: &AppSettings, tone: &str) -> String {
+    let wanted = tone.trim().to_lowercase();
+    if let Some(preset) = settings.tone_presets.iter().find(|p| p.id == wanted) {
+        return preset.instruction.clone();
     }
+    if let Some(preset) = crate::settings::default_tone_presets()
+        .into_iter()
+        .find(|p| p.id == wanted)
+    {
+        return preset.instruction;
+    }
+    tone.trim().to_string()
 }
 
 /// Whether a tone-rule pattern matches the captured context. Patterns
@@ -209,7 +210,7 @@ fn build_context_block(
         .context_tone_rules
         .iter()
         .find(|rule| rule_matches(&rule.pattern, ctx))
-        .map(|rule| tone_instruction(&rule.tone));
+        .map(|rule| tone_instruction(settings, &rule.tone));
     let tone = matched_tone.unwrap_or_else(|| {
         "choose a fitting tone for this destination yourself (formal for work apps, email, and \
          documents; casual for chat and social apps; otherwise neutral)"

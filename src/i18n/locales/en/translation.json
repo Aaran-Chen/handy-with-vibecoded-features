@@ -419,12 +419,18 @@
         },
         "rules": {
           "title": "Tone rules",
-          "description": "The first matching rule wins. Patterns are matched against the app name, process name, and website domain. Tone can be a preset (formal, casual, technical) or any custom instruction.",
+          "description": "The first matching rule wins. Patterns are matched against the app name, process name, and website domain. Pick a tone preset from the dropdown, or choose Custom to write your own instruction.",
           "patternPlaceholder": "e.g. mail.google.com or discord",
-          "tonePlaceholder": "formal, casual, technical, or custom",
+          "tonePlaceholder": "Write a custom tone instruction",
+          "customTone": "Custom…",
           "add": "Add rule",
           "remove": "Remove rule",
           "empty": "No rules yet — the model will pick a tone automatically from the detected app."
+        },
+        "presets": {
+          "title": "Tone presets",
+          "description": "Each preset embeds its own instruction into the cleanup prompt. Click a preset to expand and edit exactly what the model is told for that tone.",
+          "editorHint": "This text is embedded verbatim into the post-processing prompt when a rule selects this tone. Edits save when you click away."
         }
       },
       "api": {

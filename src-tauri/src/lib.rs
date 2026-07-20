@@ -584,6 +584,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_vad_enabled_setting,
             shortcut::change_context_aware_enabled_setting,
             shortcut::update_context_tone_rules,
+            shortcut::update_tone_presets,
             shortcut::change_app_language_setting,
             shortcut::change_update_checks_setting,
             shortcut::change_show_whats_new_on_update_setting,

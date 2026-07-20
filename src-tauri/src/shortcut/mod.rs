@@ -1231,6 +1231,18 @@ pub fn update_context_tone_rules(
 
 #[tauri::command]
 #[specta::specta]
+pub fn update_tone_presets(
+    app: AppHandle,
+    presets: Vec<crate::settings::TonePreset>,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.tone_presets = presets;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_app_language_setting(app: AppHandle, language: String) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.app_language = language.clone();

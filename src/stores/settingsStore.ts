@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import type {
   AppSettings as Settings,
   AudioDevice,
+  TonePreset,
   ToneRule,
   TranscribeAcceleratorSetting,
   OrtAcceleratorSetting,
@@ -159,6 +160,7 @@ const settingUpdaters: {
     commands.changeContextAwareEnabledSetting(value as boolean),
   context_tone_rules: (value) =>
     commands.updateContextToneRules(value as ToneRule[]),
+  tone_presets: (value) => commands.updateTonePresets(value as TonePreset[]),
   show_tray_icon: (value) =>
     commands.changeShowTrayIconSetting(value as boolean),
   transcribe_accelerator: (value) =>
