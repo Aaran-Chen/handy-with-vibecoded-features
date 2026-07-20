@@ -215,6 +215,12 @@
         "tooltip": "Rescan for models added to the models folder or Hugging Face cache outside Handy"
       },
       "noModelsMatch": "No models match this filter.",
+      "tabs": {
+        "transcription": "Transcription",
+        "transcriptionSub": "Speech-to-text models",
+        "postProcess": "AI Cleanup",
+        "postProcessSub": "Post-processing models"
+      },
       "reco": {
         "title": "Recommended for you",
         "titleGpu": "Recommended for your {{vram}} GPU",

@@ -6,8 +6,10 @@ import {
   Cpu,
   Gauge,
   Globe,
+  Mic,
   RefreshCw,
   Search,
+  Sparkles,
   Zap,
 } from "lucide-react";
 import type { ModelCardStatus } from "@/components/onboarding";
@@ -36,6 +38,9 @@ const isLegacyModel = (model: ModelInfo): boolean =>
 export const ModelsSettings: React.FC = () => {
   const { t } = useTranslation();
   const [switchingModelId, setSwitchingModelId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"transcription" | "postprocess">(
+    "transcription",
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [languageFilter, setLanguageFilter] = useState("all");
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
@@ -309,238 +314,293 @@ export const ModelsSettings: React.FC = () => {
         </p>
       </div>
 
-      {/* Search bar — filter the catalog by name or description */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text/40 pointer-events-none" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t("settings.models.searchPlaceholder")}
-          className="w-full pl-9 pr-3 py-2 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-logo-primary placeholder:text-text/40"
-        />
+      {/* Section switcher: transcription vs post-processing models */}
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-mid-gray/10 border border-mid-gray/30">
+        <button
+          type="button"
+          onClick={() => setActiveTab("transcription")}
+          className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-colors ${
+            activeTab === "transcription"
+              ? "bg-background border border-mid-gray/40 shadow-sm"
+              : "hover:bg-mid-gray/10"
+          }`}
+        >
+          <Mic
+            className={`w-4 h-4 shrink-0 ${
+              activeTab === "transcription"
+                ? "text-logo-primary"
+                : "text-text/40"
+            }`}
+          />
+          <span className="text-left min-w-0">
+            <span className="block text-sm font-medium">
+              {t("settings.models.tabs.transcription")}
+            </span>
+            <span className="block text-[11px] text-text/50 truncate">
+              {t("settings.models.tabs.transcriptionSub")}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("postprocess")}
+          className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-colors ${
+            activeTab === "postprocess"
+              ? "bg-background border border-mid-gray/40 shadow-sm"
+              : "hover:bg-mid-gray/10"
+          }`}
+        >
+          <Sparkles
+            className={`w-4 h-4 shrink-0 ${
+              activeTab === "postprocess" ? "text-logo-primary" : "text-text/40"
+            }`}
+          />
+          <span className="text-left min-w-0">
+            <span className="block text-sm font-medium">
+              {t("settings.models.tabs.postProcess")}
+            </span>
+            <span className="block text-[11px] text-text/50 truncate">
+              {t("settings.models.tabs.postProcessSub")}
+            </span>
+          </span>
+        </button>
       </div>
 
-      {/* Machine-aware recommendations */}
-      {recoChips.length > 0 && (
-        <div className="p-3 rounded-lg bg-logo-primary/5 border border-logo-primary/20">
-          <div className="text-xs font-medium text-text/60 mb-2">
-            {capability?.has_gpu
-              ? t("settings.models.reco.titleGpu", {
-                  vram: `${(capability.vram_mb / 1024).toFixed(0)} GB`,
-                })
-              : t("settings.models.reco.title")}
+      {activeTab === "postprocess" ? (
+        <PostProcessModelsSection />
+      ) : (
+        <>
+          {/* Search bar — filter the catalog by name or description */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text/40 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("settings.models.searchPlaceholder")}
+              className="w-full pl-9 pr-3 py-2 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded-lg focus:outline-none focus:ring-1 focus:ring-logo-primary placeholder:text-text/40"
+            />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {recoChips.map(({ key, label, Icon, model }) => {
-              const downloaded = model.is_downloaded || model.is_custom;
-              const isActive = model.id === currentModel;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() =>
-                    downloaded
-                      ? handleModelSelect(model.id)
-                      : handleModelDownload(model.id)
-                  }
-                  disabled={isActive}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-colors ${
-                    isActive
-                      ? "border-logo-primary bg-logo-primary/10 cursor-default"
-                      : "border-mid-gray/40 bg-background hover:bg-mid-gray/10"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 text-logo-primary shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block text-[10px] uppercase tracking-wide text-text/50">
-                      {label}
-                    </span>
-                    <span className="block text-sm font-medium truncate max-w-[160px]">
-                      {model.name}
-                    </span>
-                  </span>
-                  <span className="text-[10px] text-text/50 ml-1 shrink-0">
-                    {isActive
-                      ? t("settings.models.reco.current")
-                      : downloaded
-                        ? t("settings.models.reco.use")
-                        : t("settings.models.reco.get")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
-      {filteredModels.length > 0 ? (
-        <div className="space-y-6">
-          {/* Downloaded Models Section — header always visible so filter stays accessible */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-text/60">
-                {t("settings.models.yourModels")}
-              </h2>
-              <div className="flex items-center gap-2">
-                {/* Rescan local sources for models added outside Handy */}
-                <button
-                  type="button"
-                  onClick={() => rescanLocalModels()}
-                  disabled={isRescanning}
-                  title={t("settings.models.rescan.tooltip")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-mid-gray/10 text-text/60 hover:bg-mid-gray/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${isRescanning ? "animate-spin" : ""}`}
-                  />
-                  <span>{t("settings.models.rescan.label")}</span>
-                </button>
-                {/* Language filter dropdown */}
-                <div className="relative" ref={languageDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLanguageDropdownOpen(!languageDropdownOpen)
-                    }
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                      languageFilter !== "all"
-                        ? "bg-logo-primary/20 text-logo-primary"
-                        : "bg-mid-gray/10 text-text/60 hover:bg-mid-gray/20"
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span className="max-w-[120px] truncate">
-                      {selectedLanguageLabel}
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform ${
-                        languageDropdownOpen ? "rotate-180" : ""
+          {/* Machine-aware recommendations */}
+          {recoChips.length > 0 && (
+            <div className="p-3 rounded-lg bg-logo-primary/5 border border-logo-primary/20">
+              <div className="text-xs font-medium text-text/60 mb-2">
+                {capability?.has_gpu
+                  ? t("settings.models.reco.titleGpu", {
+                      vram: `${(capability.vram_mb / 1024).toFixed(0)} GB`,
+                    })
+                  : t("settings.models.reco.title")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {recoChips.map(({ key, label, Icon, model }) => {
+                  const downloaded = model.is_downloaded || model.is_custom;
+                  const isActive = model.id === currentModel;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        downloaded
+                          ? handleModelSelect(model.id)
+                          : handleModelDownload(model.id)
+                      }
+                      disabled={isActive}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-colors ${
+                        isActive
+                          ? "border-logo-primary bg-logo-primary/10 cursor-default"
+                          : "border-mid-gray/40 bg-background hover:bg-mid-gray/10"
                       }`}
-                    />
-                  </button>
-
-                  {languageDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-1 w-56 bg-background border border-mid-gray/80 rounded-lg shadow-lg z-50 overflow-hidden">
-                      <div className="p-2 border-b border-mid-gray/40">
-                        <input
-                          ref={languageSearchInputRef}
-                          type="text"
-                          value={languageSearch}
-                          onChange={(e) => setLanguageSearch(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === "Enter" &&
-                              filteredLanguages.length > 0
-                            ) {
-                              setLanguageFilter(filteredLanguages[0].value);
-                              setLanguageDropdownOpen(false);
-                              setLanguageSearch("");
-                            } else if (e.key === "Escape") {
-                              setLanguageDropdownOpen(false);
-                              setLanguageSearch("");
-                            }
-                          }}
-                          placeholder={t(
-                            "settings.general.language.searchPlaceholder",
-                          )}
-                          className="w-full px-2 py-1 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded-md focus:outline-none focus:ring-1 focus:ring-logo-primary"
-                        />
-                      </div>
-                      <div className="max-h-48 overflow-y-auto">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLanguageFilter("all");
-                            setLanguageDropdownOpen(false);
-                            setLanguageSearch("");
-                          }}
-                          className={`w-full px-3 py-1.5 text-sm text-left transition-colors ${
-                            languageFilter === "all"
-                              ? "bg-logo-primary/20 text-logo-primary font-semibold"
-                              : "hover:bg-mid-gray/10"
-                          }`}
-                        >
-                          {t("settings.models.filters.allLanguages")}
-                        </button>
-                        {filteredLanguages.map((lang) => (
-                          <button
-                            key={lang.value}
-                            type="button"
-                            onClick={() => {
-                              setLanguageFilter(lang.value);
-                              setLanguageDropdownOpen(false);
-                              setLanguageSearch("");
-                            }}
-                            className={`w-full px-3 py-1.5 text-sm text-left transition-colors ${
-                              languageFilter === lang.value
-                                ? "bg-logo-primary/20 text-logo-primary font-semibold"
-                                : "hover:bg-mid-gray/10"
-                            }`}
-                          >
-                            {lang.label}
-                          </button>
-                        ))}
-                        {filteredLanguages.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-text/50 text-center">
-                            {t("settings.general.language.noResults")}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    >
+                      <Icon className="w-3.5 h-3.5 text-logo-primary shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-[10px] uppercase tracking-wide text-text/50">
+                          {label}
+                        </span>
+                        <span className="block text-sm font-medium truncate max-w-[160px]">
+                          {model.name}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-text/50 ml-1 shrink-0">
+                        {isActive
+                          ? t("settings.models.reco.current")
+                          : downloaded
+                            ? t("settings.models.reco.use")
+                            : t("settings.models.reco.get")}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {downloadedModels.map((model: ModelInfo) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                status={getModelStatus(model.id)}
-                onSelect={handleModelSelect}
-                onDownload={handleModelDownload}
-                onDelete={handleModelDelete}
-                onCancel={handleModelCancel}
-                downloadProgress={getDownloadProgress(model.id)}
-                downloadSpeed={getDownloadSpeed(model.id)}
-                showRecommended={false}
-              />
-            ))}
-          </div>
+          )}
 
-          {/* Available Models Section */}
-          {availableModels.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-medium text-text/60">
-                {t("settings.models.availableModels")}
-              </h2>
-              {availableModels.map((model: ModelInfo) => (
-                <ModelCard
-                  key={model.id}
-                  model={model}
-                  status={getModelStatus(model.id)}
-                  onSelect={handleModelSelect}
-                  onDownload={handleModelDownload}
-                  onDelete={handleModelDelete}
-                  onCancel={handleModelCancel}
-                  downloadProgress={getDownloadProgress(model.id)}
-                  downloadSpeed={getDownloadSpeed(model.id)}
-                  showRecommended={true}
-                />
-              ))}
+          {filteredModels.length > 0 ? (
+            <div className="space-y-6">
+              {/* Downloaded Models Section — header always visible so filter stays accessible */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-medium text-text/60">
+                    {t("settings.models.yourModels")}
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {/* Rescan local sources for models added outside Handy */}
+                    <button
+                      type="button"
+                      onClick={() => rescanLocalModels()}
+                      disabled={isRescanning}
+                      title={t("settings.models.rescan.tooltip")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-mid-gray/10 text-text/60 hover:bg-mid-gray/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isRescanning ? "animate-spin" : ""}`}
+                      />
+                      <span>{t("settings.models.rescan.label")}</span>
+                    </button>
+                    {/* Language filter dropdown */}
+                    <div className="relative" ref={languageDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLanguageDropdownOpen(!languageDropdownOpen)
+                        }
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          languageFilter !== "all"
+                            ? "bg-logo-primary/20 text-logo-primary"
+                            : "bg-mid-gray/10 text-text/60 hover:bg-mid-gray/20"
+                        }`}
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span className="max-w-[120px] truncate">
+                          {selectedLanguageLabel}
+                        </span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform ${
+                            languageDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {languageDropdownOpen && (
+                        <div className="absolute top-full right-0 mt-1 w-56 bg-background border border-mid-gray/80 rounded-lg shadow-lg z-50 overflow-hidden">
+                          <div className="p-2 border-b border-mid-gray/40">
+                            <input
+                              ref={languageSearchInputRef}
+                              type="text"
+                              value={languageSearch}
+                              onChange={(e) =>
+                                setLanguageSearch(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (
+                                  e.key === "Enter" &&
+                                  filteredLanguages.length > 0
+                                ) {
+                                  setLanguageFilter(filteredLanguages[0].value);
+                                  setLanguageDropdownOpen(false);
+                                  setLanguageSearch("");
+                                } else if (e.key === "Escape") {
+                                  setLanguageDropdownOpen(false);
+                                  setLanguageSearch("");
+                                }
+                              }}
+                              placeholder={t(
+                                "settings.general.language.searchPlaceholder",
+                              )}
+                              className="w-full px-2 py-1 text-sm bg-mid-gray/10 border border-mid-gray/40 rounded-md focus:outline-none focus:ring-1 focus:ring-logo-primary"
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLanguageFilter("all");
+                                setLanguageDropdownOpen(false);
+                                setLanguageSearch("");
+                              }}
+                              className={`w-full px-3 py-1.5 text-sm text-left transition-colors ${
+                                languageFilter === "all"
+                                  ? "bg-logo-primary/20 text-logo-primary font-semibold"
+                                  : "hover:bg-mid-gray/10"
+                              }`}
+                            >
+                              {t("settings.models.filters.allLanguages")}
+                            </button>
+                            {filteredLanguages.map((lang) => (
+                              <button
+                                key={lang.value}
+                                type="button"
+                                onClick={() => {
+                                  setLanguageFilter(lang.value);
+                                  setLanguageDropdownOpen(false);
+                                  setLanguageSearch("");
+                                }}
+                                className={`w-full px-3 py-1.5 text-sm text-left transition-colors ${
+                                  languageFilter === lang.value
+                                    ? "bg-logo-primary/20 text-logo-primary font-semibold"
+                                    : "hover:bg-mid-gray/10"
+                                }`}
+                              >
+                                {lang.label}
+                              </button>
+                            ))}
+                            {filteredLanguages.length === 0 && (
+                              <div className="px-3 py-2 text-sm text-text/50 text-center">
+                                {t("settings.general.language.noResults")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {downloadedModels.map((model: ModelInfo) => (
+                  <ModelCard
+                    key={model.id}
+                    model={model}
+                    status={getModelStatus(model.id)}
+                    onSelect={handleModelSelect}
+                    onDownload={handleModelDownload}
+                    onDelete={handleModelDelete}
+                    onCancel={handleModelCancel}
+                    downloadProgress={getDownloadProgress(model.id)}
+                    downloadSpeed={getDownloadSpeed(model.id)}
+                    showRecommended={false}
+                  />
+                ))}
+              </div>
+
+              {/* Available Models Section */}
+              {availableModels.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-sm font-medium text-text/60">
+                    {t("settings.models.availableModels")}
+                  </h2>
+                  {availableModels.map((model: ModelInfo) => (
+                    <ModelCard
+                      key={model.id}
+                      model={model}
+                      status={getModelStatus(model.id)}
+                      onSelect={handleModelSelect}
+                      onDownload={handleModelDownload}
+                      onDelete={handleModelDelete}
+                      onCancel={handleModelCancel}
+                      downloadProgress={getDownloadProgress(model.id)}
+                      downloadSpeed={getDownloadSpeed(model.id)}
+                      showRecommended={true}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-text/50">
+              {t("settings.models.noModelsMatch")}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-text/50">
-          {t("settings.models.noModelsMatch")}
-        </div>
+        </>
       )}
-
-      {/* Post-processing (AI cleanup) models */}
-      <div className="pt-6 mt-2 border-t border-mid-gray/30">
-        <PostProcessModelsSection />
-      </div>
     </div>
   );
 };

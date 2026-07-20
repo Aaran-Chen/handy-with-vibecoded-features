@@ -299,6 +299,83 @@ fn capture() -> Option<AppContext> {
     None
 }
 
+/// The character immediately to the left of the caret in the focused
+/// control, read via UI Automation's text pattern. Used for smart paste
+/// spacing (dictating right after a sentence should insert a space first).
+/// Returns None when the focused control exposes no caret/text pattern —
+/// callers must treat that as "unknown", not "no character".
+#[cfg(windows)]
+pub fn char_before_caret() -> Option<char> {
+    use windows::core::BOOL;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern, IUIAutomationTextPattern2,
+        TextPatternRangeEndpoint_Start, TextUnit_Character, UIA_TextPattern2Id, UIA_TextPatternId,
+    };
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let automation: IUIAutomation =
+            match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+                Ok(a) => a,
+                Err(e) => {
+                    log::debug!("char_before_caret: UIA instance failed: {e}");
+                    return None;
+                }
+            };
+        let focused = match automation.GetFocusedElement() {
+            Ok(f) => f,
+            Err(e) => {
+                log::debug!("char_before_caret: no focused element: {e}");
+                return None;
+            }
+        };
+
+        // Prefer the true caret range (TextPattern2); fall back to the
+        // selection's start, which coincides with the caret when nothing is
+        // selected and is still the right anchor when pasting over one.
+        let range = if let Ok(tp2) =
+            focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+        {
+            let mut is_active = BOOL::default();
+            match tp2.GetCaretRange(&mut is_active) {
+                Ok(r) => r,
+                Err(e) => {
+                    log::debug!("char_before_caret: caret range failed: {e}");
+                    return None;
+                }
+            }
+        } else {
+            let Ok(tp) = focused.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            else {
+                log::debug!("char_before_caret: focused element has no text pattern");
+                return None;
+            };
+            let ranges = tp.GetSelection().ok()?;
+            if ranges.Length().ok()? == 0 {
+                return None;
+            }
+            ranges.GetElement(0).ok()?
+        };
+
+        // Pull the range's start back one character and read what's there.
+        range
+            .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -1)
+            .ok()?;
+        let text = range.GetText(8).ok()?.to_string();
+        let ch = text.chars().next();
+        log::debug!("char_before_caret probed: {:?}", ch);
+        ch
+    }
+}
+
+#[cfg(not(windows))]
+pub fn char_before_caret() -> Option<char> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

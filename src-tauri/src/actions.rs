@@ -314,10 +314,12 @@ async fn post_process_transcription(
     // - custom: top-level reasoning_effort (works for local OpenAI-compat servers)
     // - openrouter: nested reasoning object; exclude:true also keeps reasoning text
     //   out of the response so it can't pollute structured-output JSON parsing
-    // Low temperature keeps cleanup deterministic and faithful; only sent to
-    // the custom/local provider since some hosted models reject it.
+    // Temperature 0 (greedy) keeps cleanup deterministic and faithful — at
+    // 0.2, cross-sentence self-correction handling still varied run to run.
+    // Only sent to the custom/local provider since some hosted models reject
+    // explicit temperatures.
     let temperature = if provider.id == "custom" {
-        Some(0.2)
+        Some(0.0)
     } else {
         None
     };

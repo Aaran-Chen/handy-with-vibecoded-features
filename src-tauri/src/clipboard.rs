@@ -589,11 +589,34 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
+/// Whether pasting `text` directly after `prev` (the character left of the
+/// caret) would glue a new sentence onto existing text — i.e. the caret sits
+/// right of punctuation and the paste doesn't already start with whitespace.
+fn needs_leading_space(prev: Option<char>, text: &str) -> bool {
+    let Some(prev) = prev else { return false };
+    if text.is_empty() || text.starts_with(char::is_whitespace) {
+        return false;
+    }
+    matches!(prev, '.' | '!' | '?' | ',' | ':' | ';')
+}
+
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
     let paste_delay_after_ms = settings.paste_delay_after_ms;
+
+    // Smart spacing: when the caret sits directly right of sentence
+    // punctuation ("...done.|"), insert a space first so consecutive
+    // dictations read "done. Next" instead of "done.Next". Caret inspection
+    // must happen before we touch the clipboard or synthesize keys, while
+    // the target control still has focus.
+    let text = if needs_leading_space(crate::app_context::char_before_caret(), &text) {
+        info!("Smart spacing: caret is right of punctuation, prepending a space");
+        format!(" {}", text)
+    } else {
+        text
+    };
 
     // Append trailing space if setting is enabled
     let text = if settings.append_trailing_space {
@@ -668,6 +691,22 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leading_space_added_only_after_punctuation() {
+        assert!(needs_leading_space(Some('.'), "Next sentence"));
+        assert!(needs_leading_space(Some('?'), "Sure"));
+        assert!(needs_leading_space(Some(','), "and then"));
+        // Already spaced, empty, or unknown caret context: leave alone.
+        assert!(!needs_leading_space(Some('.'), " already spaced"));
+        assert!(!needs_leading_space(Some('.'), ""));
+        assert!(!needs_leading_space(None, "Next sentence"));
+        // After a letter, a space (word boundary) is the transcriber's job,
+        // not ours; after whitespace there is nothing to separate.
+        assert!(!needs_leading_space(Some('e'), "Next"));
+        assert!(!needs_leading_space(Some(' '), "Next"));
+        assert!(!needs_leading_space(Some('\n'), "Next"));
+    }
 
     #[test]
     fn auto_submit_requires_setting_enabled() {
