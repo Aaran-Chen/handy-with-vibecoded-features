@@ -32,6 +32,7 @@ pub fn cancel_current_operation(app: &AppHandle) {
     // Update tray icon and hide overlay + ghost preview
     change_tray_icon(app, crate::tray::TrayIconState::Idle);
     hide_recording_overlay(app);
+    crate::actions::stop_chunked_preview();
     crate::ghost::hide(app);
 
     // Unload model if immediate unload is enabled

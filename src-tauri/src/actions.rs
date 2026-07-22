@@ -46,6 +46,101 @@ impl Drop for FinishGuard {
     }
 }
 
+/// Stop flag for the chunked ghost-preview loop (non-streaming models). One
+/// dictation at a time, so a single slot suffices: starting a new loop
+/// replaces (and thereby stops) the previous one.
+static CHUNKED_PREVIEW_STOP: once_cell::sync::Lazy<
+    std::sync::Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
+> = once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
+
+/// Signal the chunked preview loop (if any) to stop before the final
+/// transcription needs the engine.
+pub fn stop_chunked_preview() {
+    if let Ok(slot) = CHUNKED_PREVIEW_STOP.lock() {
+        if let Some(flag) = slot.as_ref() {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+/// Live-ish preview for models without native streaming: periodically batch-
+/// transcribe the audio captured so far (bounded to the most recent window)
+/// and emit the result through the same StreamTextEvent the ghost preview
+/// renders. Passes are self-paced — a new one starts only after the previous
+/// finished — so slow models simply preview less often.
+fn spawn_chunked_preview(app: AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let flag = Arc::new(AtomicBool::new(false));
+    if let Ok(mut slot) = CHUNKED_PREVIEW_STOP.lock() {
+        if let Some(previous) = slot.replace(Arc::clone(&flag)) {
+            previous.store(true, Ordering::SeqCst);
+        }
+    }
+
+    std::thread::spawn(move || {
+        // Most recent audio window per pass. Bounds the per-pass engine time
+        // (and therefore how long the final transcription can be blocked).
+        const WINDOW_SAMPLES: usize = 16_000 * 10;
+        const MIN_SAMPLES: usize = 16_000 * 4 / 5; // ~0.8s before first pass
+        const MIN_GROWTH: usize = 16_000 / 3; // re-pass only after ~0.3s more audio
+
+        let rm = Arc::clone(&app.state::<Arc<AudioRecordingManager>>());
+        let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
+        let mut last_len = 0usize;
+
+        // The loop is spawned slightly before try_start_recording flips the
+        // recording flag — wait (bounded) for the session to actually begin
+        // instead of exiting on that startup race.
+        let spawn_at = std::time::Instant::now();
+        while !rm.is_recording() {
+            if flag.load(Ordering::SeqCst) || spawn_at.elapsed() > std::time::Duration::from_secs(2)
+            {
+                debug!("chunked preview loop ended (recording never began)");
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+
+        while !flag.load(Ordering::SeqCst) && rm.is_recording() {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            if flag.load(Ordering::SeqCst) || !rm.is_recording() {
+                break;
+            }
+            let samples = rm.preview_samples();
+            if samples.len() < MIN_SAMPLES || samples.len() < last_len + MIN_GROWTH {
+                continue;
+            }
+            last_len = samples.len();
+            let start_at = samples.len().saturating_sub(WINDOW_SAMPLES);
+            let mut chunk = samples[start_at..].to_vec();
+            // Engines expect at least ~1s of audio; pad like stop_recording does.
+            if chunk.len() < 16_000 {
+                chunk.resize(16_000 * 5 / 4, 0.0);
+            }
+            match tm.transcribe(chunk) {
+                Ok(text) => {
+                    if flag.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if !text.trim().is_empty() {
+                        use tauri_specta::Event as _;
+                        let _ = crate::managers::transcription::StreamTextEvent {
+                            committed: String::new(),
+                            tentative: text,
+                        }
+                        .emit(&app);
+                    }
+                }
+                Err(e) => {
+                    debug!("chunked preview pass failed: {e}");
+                }
+            }
+        }
+        debug!("chunked preview loop ended");
+    });
+}
+
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
     fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
@@ -704,14 +799,17 @@ impl ShortcutAction for TranscribeAction {
         }
 
         // Caret ghost preview: live half-opacity transcription at the text
-        // cursor. Only meaningful while streaming (there is no partial text
-        // otherwise); positioned on a background thread — the caret lookup
-        // can involve a UIA round-trip.
-        if settings.inline_preview && model_supports_streaming {
+        // cursor. Streaming models feed it natively; everything else gets
+        // chunked passes over the audio captured so far. Positioned on a
+        // background thread — the caret lookup can involve a UIA round-trip.
+        if settings.inline_preview {
             let ah_ghost = app.clone();
             std::thread::spawn(move || {
                 crate::ghost::show_at_caret(&ah_ghost, "listening");
             });
+            if !model_supports_streaming {
+                spawn_chunked_preview(app.clone());
+            }
         }
         let plan_elapsed = plan_started.elapsed();
 
@@ -816,6 +914,10 @@ impl ShortcutAction for TranscribeAction {
     fn stop(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
         // Unregister the cancel shortcut when transcription stops
         shortcut::unregister_cancel_shortcut(app);
+
+        // Stop the chunked preview loop promptly so an in-flight pass is the
+        // only thing the final transcription can wait on.
+        stop_chunked_preview();
 
         let stop_time = Instant::now();
         debug!("TranscribeAction::stop called for binding: {}", binding_id);

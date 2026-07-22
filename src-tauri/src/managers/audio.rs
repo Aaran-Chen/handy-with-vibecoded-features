@@ -132,6 +132,7 @@ fn create_audio_recorder(
     vad_path: &Path,
     app_handle: &tauri::AppHandle,
     stream_router: Arc<StreamRouter>,
+    preview_buf: Arc<Mutex<Vec<f32>>>,
 ) -> Result<AudioRecorder, anyhow::Error> {
     // A single Silero engine covers both the offline and streaming policies (never
     // active at once within a recording), so the recorder reconfigures its
@@ -165,6 +166,17 @@ fn create_audio_recorder(
             let router = stream_router;
             move |frame| {
                 router.feed(frame);
+                // Mirror frames into the preview buffer so chunked ghost
+                // previews work for non-streaming models too. Bounded: keep
+                // at most the last ~90s (16 kHz mono f32).
+                if let Ok(mut buf) = preview_buf.lock() {
+                    buf.extend_from_slice(frame);
+                    const MAX: usize = 16_000 * 90;
+                    if buf.len() > MAX {
+                        let excess = buf.len() - MAX;
+                        buf.drain(..excess);
+                    }
+                }
             }
         });
 
@@ -186,6 +198,9 @@ pub struct AudioRecordingManager {
     close_generation: Arc<AtomicU64>,
     cancel_generation: Arc<AtomicU64>,
     stream_router: Arc<StreamRouter>,
+    /// Real-time mirror of the current recording's (VAD-filtered) samples,
+    /// consumed by the chunked ghost preview for non-streaming models.
+    preview_buf: Arc<Mutex<Vec<f32>>>,
     /// Resolution of a *named* microphone (selected or clamshell) to its cpal
     /// device, cached so on-demand recording starts skip the full device
     /// enumeration (~40-110ms). Keyed by the resolved name, so a settings
@@ -221,6 +236,7 @@ impl AudioRecordingManager {
             close_generation: Arc::new(AtomicU64::new(0)),
             cancel_generation: Arc::new(AtomicU64::new(0)),
             stream_router,
+            preview_buf: Arc::new(Mutex::new(Vec::new())),
             cached_device: Arc::new(Mutex::new(None)),
         };
 
@@ -361,6 +377,7 @@ impl AudioRecordingManager {
                 &vad_path,
                 &self.app_handle,
                 Arc::clone(&self.stream_router),
+                Arc::clone(&self.preview_buf),
             )?);
         }
         Ok(())
@@ -486,6 +503,10 @@ impl AudioRecordingManager {
         let mut state = self.state.lock().unwrap();
 
         if let RecordingState::Idle = *state {
+            // Fresh session: drop any previous recording's preview samples.
+            if let Ok(mut buf) = self.preview_buf.lock() {
+                buf.clear();
+            }
             // Ensure microphone is open in on-demand mode
             if matches!(*self.mode.lock().unwrap(), MicrophoneMode::OnDemand) {
                 // Cancel any pending lazy close
@@ -611,6 +632,15 @@ impl AudioRecordingManager {
             _ => None,
         }
     }
+    /// Snapshot of the current recording's samples so far (VAD-filtered,
+    /// 16 kHz mono), for chunked preview transcription.
+    pub fn preview_samples(&self) -> Vec<f32> {
+        self.preview_buf
+            .lock()
+            .map(|buf| buf.clone())
+            .unwrap_or_default()
+    }
+
     pub fn is_recording(&self) -> bool {
         matches!(
             *self.state.lock().unwrap(),

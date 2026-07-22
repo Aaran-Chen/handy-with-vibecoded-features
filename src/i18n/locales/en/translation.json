@@ -272,7 +272,7 @@
     },
     "inlinePreview": {
       "label": "Preview at cursor",
-      "description": "Shows a half-opacity live preview of what you're saying right at the text cursor (streaming models only), then a spinning star while the AI cleanup runs, before the final text is pasted."
+      "description": "Shows a half-opacity live preview of what you're saying right at the text cursor, then a spinning star while the AI cleanup runs, before the final text is pasted. Works with every model; streaming models update the preview fastest."
     },
     "advanced": {
       "groups": {
