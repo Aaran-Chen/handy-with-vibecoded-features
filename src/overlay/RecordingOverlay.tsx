@@ -39,6 +39,12 @@ const RecordingOverlay: React.FC = () => {
   // True once live text overflows the cap. A top overlay fades its top edge only
   // while overflowing, so the resting first line stays crisp flush under the pill.
   const [overflowing, setOverflowing] = useState(false);
+  // Preview editing: clicking the live text turns it into an editable box.
+  // The edited version is sent to the backend and treated as authoritative
+  // guidance for the AI cleanup of the final transcription.
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   // Live-text scroll-back: the text region "sticks" to the newest line while the
@@ -80,6 +86,7 @@ const RecordingOverlay: React.FC = () => {
 
       const unlistenHide = await listen("hide-overlay", () => {
         setIsVisible(false);
+        setEditing(false);
       });
 
       const unlistenLevel = await listen<number[]>("mic-level", (event) => {
@@ -148,6 +155,34 @@ const RecordingOverlay: React.FC = () => {
 
   const fmtTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  // ---- Preview editing ----
+  const beginEdit = async () => {
+    if (editing) return;
+    setEditText(
+      `${streamText.committed}${streamText.committed && streamText.tentative ? " " : ""}${streamText.tentative}`,
+    );
+    setEditing(true);
+    try {
+      await commands.beginPreviewEdit();
+    } catch {
+      // Focus grant failed — abandon the edit UI rather than a dead textbox.
+      setEditing(false);
+      return;
+    }
+    // Focus the box once it exists.
+    setTimeout(() => editRef.current?.focus(), 60);
+  };
+
+  const finishEdit = async (confirmed: boolean) => {
+    if (!editing) return;
+    setEditing(false);
+    try {
+      await commands.submitPreviewEdit(confirmed ? editText : "");
+    } catch {
+      // Backend unavailable — nothing else to do from the overlay.
+    }
+  };
 
   // ---- Shared building blocks (one visual language for every overlay form) ----
   const waveform = (
@@ -231,21 +266,42 @@ const RecordingOverlay: React.FC = () => {
         >
           <div className="stext">
             <div className="stext-clip">
-              <div
-                className={`stext-cap ${overflowing ? "overflowing" : ""}`}
-                ref={capRef}
-                onScroll={handleStreamScroll}
-              >
-                <p>
-                  <span className="committed">
-                    {streamText.committed ? streamText.committed + " " : ""}
-                  </span>
-                  <span className="tentative">{streamText.tentative}</span>
-                  {/* Drop the blinking caret once finalizing — it's no longer
-                      capturing, and a static star conveys the work. */}
-                  {!working && <span className="scaret" />}
-                </p>
-              </div>
+              {editing ? (
+                <textarea
+                  ref={editRef}
+                  className="sedit"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      finishEdit(true);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      finishEdit(false);
+                    }
+                  }}
+                  onBlur={() => finishEdit(true)}
+                  spellCheck={false}
+                />
+              ) : (
+                <div
+                  className={`stext-cap ${overflowing ? "overflowing" : ""}`}
+                  ref={capRef}
+                  onScroll={handleStreamScroll}
+                  onClick={beginEdit}
+                >
+                  <p>
+                    <span className="committed">
+                      {streamText.committed ? streamText.committed + " " : ""}
+                    </span>
+                    <span className="tentative">{streamText.tentative}</span>
+                    {/* Drop the blinking caret once finalizing — it's no longer
+                        capturing, and a static star conveys the work. */}
+                    {!working && <span className="scaret" />}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           {working

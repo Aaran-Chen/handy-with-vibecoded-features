@@ -24,6 +24,10 @@ pub struct AppContext {
     pub domain: Option<String>,
     /// Lowercased executable stem (e.g. "vivaldi"), used for rule matching.
     pub process_name: String,
+    /// Raw foreground window handle at capture time (0 when unavailable).
+    /// Used to hand focus back to the dictation target after the user edits
+    /// the preview in the overlay (which must take focus to accept typing).
+    pub hwnd: isize,
 }
 
 struct CaptureState {
@@ -238,8 +242,29 @@ fn capture() -> Option<AppContext> {
         window_title,
         domain,
         process_name,
+        hwnd: hwnd.0 as isize,
     })
 }
+
+/// Hand keyboard focus back to the dictation target window (captured at
+/// recording start). Used after preview editing in the overlay, which takes
+/// focus to accept typing — without this, the final paste would land in the
+/// overlay instead of the user's app.
+#[cfg(windows)]
+pub fn refocus_last_target() {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+    if let Some(ctx) = last_context() {
+        if ctx.hwnd != 0 {
+            unsafe {
+                let _ = SetForegroundWindow(HWND(ctx.hwnd as *mut core::ffi::c_void));
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn refocus_last_target() {}
 
 /// Read the current page URL from a browser window via UI Automation: the
 /// page's Document element exposes the URL through its ValuePattern in both

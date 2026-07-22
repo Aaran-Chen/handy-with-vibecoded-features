@@ -252,6 +252,34 @@
 .stext-cap::-webkit-scrollbar {
   display: none;
 }
+/* The preview is editable — signal it. */
+.stext-cap {
+  cursor: text;
+}
+/* Preview edit box: same type as the live text, flat and borderless so the
+   switch into editing feels like the text simply became touchable. Not
+   transformed, so the wheel tilt relaxes while editing. */
+.sedit {
+  width: 100%;
+  max-height: var(--ov-cap-max-h);
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 12px 14px 6px;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.35;
+  letter-spacing: -0.003em;
+  color: color-mix(in srgb, var(--color-text) 95%, transparent);
+  scrollbar-width: none;
+}
+.sedit::-webkit-scrollbar {
+  display: none;
+}
 .stext-cap p {
   /* Bottom-anchor the text when it's shorter than the viewport, avoiding the
      justify-content:flex-end overflow bug that makes the top unscrollable. */
