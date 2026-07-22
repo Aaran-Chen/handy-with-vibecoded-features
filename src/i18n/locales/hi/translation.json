@@ -214,7 +214,38 @@
         "label": "फिर से स्कैन करें",
         "tooltip": "Handy के बाहर, मॉडल फ़ोल्डर या Hugging Face कैश में जोड़े गए मॉडल के लिए फिर से स्कैन करें"
       },
-      "noModelsMatch": "इस फ़िल्टर से मेल खाने वाला कोई मॉडल नहीं है."
+      "noModelsMatch": "इस फ़िल्टर से मेल खाने वाला कोई मॉडल नहीं है.",
+      "tabs": {
+        "transcription": "Transcription",
+        "transcriptionSub": "Speech-to-text models",
+        "postProcess": "AI Cleanup",
+        "postProcessSub": "Post-processing models"
+      },
+      "reco": {
+        "title": "Recommended for you",
+        "titleGpu": "Recommended for your {{vram}} GPU",
+        "machine": "For your machine",
+        "accuracy": "Best accuracy",
+        "speed": "Fastest",
+        "use": "Use",
+        "get": "Download",
+        "current": "In use"
+      },
+      "postProcess": {
+        "title": "Post-processing models (AI cleanup)",
+        "description": "Download a local AI model to clean up and tone-adapt your transcripts.",
+        "machineLine": "Recommendations tuned to your {{hardware}}. All run locally through Ollama.",
+        "notOllama": "Post-processing model downloads require the local Ollama provider. Set the provider to Custom (http://localhost:11434/v1) in the Post Process tab.",
+        "badgeMachine": "For your machine",
+        "badgeSpeed": "Fastest",
+        "badgeAccuracy": "Most accurate",
+        "use": "Use",
+        "download": "Download",
+        "active": "In use",
+        "starting": "Starting…",
+        "mayBeSlow": "may exceed your memory",
+        "downloaded": "Downloaded {{model}}"
+      }
     },
     "sound": {
       "title": "आवाज़",
@@ -421,6 +452,35 @@
         "cancel": "रद्द करें",
         "selectToEdit": "जानकारी देखने और बदलाव करने के लिए, ऊपर कोई प्रॉम्प्ट चुनें.",
         "createFirst": "अपना पहला पोस्ट-प्रोसेसिंग प्रॉम्प्ट बनाने के लिए, ऊपर 'नया प्रॉम्प्ट बनाएं' पर क्लिक करें."
+      },
+      "automatic": {
+        "title": "Automatic",
+        "toggle": {
+          "label": "Post-process every transcription",
+          "description": "Run the AI cleanup and context-aware tone pass on ordinary dictation too, so you don't need the separate post-processing hotkey. Adds the model's processing time to each transcription."
+        }
+      },
+      "context": {
+        "title": "Context Awareness",
+        "toggle": {
+          "label": "Adapt tone to destination",
+          "description": "Detects the app or website you are dictating into and asks the post-processing model to match its tone — formal for email and documents, casual for chats. Detection happens entirely on this device."
+        },
+        "rules": {
+          "title": "Tone rules",
+          "description": "The first matching rule wins. Patterns are matched against the app name, process name, and website domain. Pick a tone preset from the dropdown, or choose Custom to write your own instruction.",
+          "patternPlaceholder": "e.g. mail.google.com or discord",
+          "tonePlaceholder": "Write a custom tone instruction",
+          "customTone": "Custom…",
+          "add": "Add rule",
+          "remove": "Remove rule",
+          "empty": "No rules yet — the model will pick a tone automatically from the detected app."
+        },
+        "presets": {
+          "title": "Tone presets",
+          "description": "Each preset embeds its own instruction into the cleanup prompt. Click a preset to expand and edit exactly what the model is told for that tone.",
+          "editorHint": "This text is embedded verbatim into the post-processing prompt when a rule selects this tone. Edits save when you click away."
+        }
       }
     },
     "history": {
@@ -534,6 +594,10 @@
       "recordingBuffer": {
         "title": "अतिरिक्त रिकॉर्डिंग बफ़र",
         "description": "बटन छोड़ने के बाद भी रिकॉर्डिंग जारी रखने का अतिरिक्त समय (मिलीसेकंड में), ताकि आखिरी हिस्से का ऑडियो कैप्चर हो सके. 0 = कोई अतिरिक्त बफ़र नहीं."
+      },
+      "clipboardFallback": {
+        "label": "Keep Transcript on Clipboard",
+        "description": "If no text box has focus when pasting, leave the transcription on the clipboard so you can paste it manually"
       }
     },
     "about": {
@@ -568,6 +632,10 @@
           "details": "Handy का लोकल स्पीच-टू-टेक्स्ट transcribe.cpp और ggml पर आधारित है. Georgi Gerganov और योगदान देने वालों के शानदार काम के लिए धन्यवाद."
         }
       }
+    },
+    "previewModel": {
+      "label": "Instant preview via streaming model",
+      "description": "When your selected model can't stream, the best installed streaming model powers the live text in the recording overlay while your selected model does the real transcription in the background. Requires a streaming-capable model to be downloaded."
     }
   },
   "footer": {

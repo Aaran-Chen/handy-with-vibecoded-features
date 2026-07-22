@@ -237,6 +237,37 @@
       "rescan": {
         "label": "다시 스캔",
         "tooltip": "Handy 외부에서 모델 폴더 또는 Hugging Face 캐시에 추가된 모델을 다시 스캔합니다"
+      },
+      "tabs": {
+        "transcription": "Transcription",
+        "transcriptionSub": "Speech-to-text models",
+        "postProcess": "AI Cleanup",
+        "postProcessSub": "Post-processing models"
+      },
+      "reco": {
+        "title": "Recommended for you",
+        "titleGpu": "Recommended for your {{vram}} GPU",
+        "machine": "For your machine",
+        "accuracy": "Best accuracy",
+        "speed": "Fastest",
+        "use": "Use",
+        "get": "Download",
+        "current": "In use"
+      },
+      "postProcess": {
+        "title": "Post-processing models (AI cleanup)",
+        "description": "Download a local AI model to clean up and tone-adapt your transcripts.",
+        "machineLine": "Recommendations tuned to your {{hardware}}. All run locally through Ollama.",
+        "notOllama": "Post-processing model downloads require the local Ollama provider. Set the provider to Custom (http://localhost:11434/v1) in the Post Process tab.",
+        "badgeMachine": "For your machine",
+        "badgeSpeed": "Fastest",
+        "badgeAccuracy": "Most accurate",
+        "use": "Use",
+        "download": "Download",
+        "active": "In use",
+        "starting": "Starting…",
+        "mayBeSlow": "may exceed your memory",
+        "downloaded": "Downloaded {{model}}"
       }
     },
     "advanced": {
@@ -421,6 +452,35 @@
         "cancel": "취소",
         "selectToEdit": "세부 정보를 보고 편집하려면 위에서 프롬프트를 선택하세요.",
         "createFirst": "첫 번째 후처리 프롬프트를 만들려면 위의 '새 프롬프트 만들기'를 클릭하세요."
+      },
+      "automatic": {
+        "title": "Automatic",
+        "toggle": {
+          "label": "Post-process every transcription",
+          "description": "Run the AI cleanup and context-aware tone pass on ordinary dictation too, so you don't need the separate post-processing hotkey. Adds the model's processing time to each transcription."
+        }
+      },
+      "context": {
+        "title": "Context Awareness",
+        "toggle": {
+          "label": "Adapt tone to destination",
+          "description": "Detects the app or website you are dictating into and asks the post-processing model to match its tone — formal for email and documents, casual for chats. Detection happens entirely on this device."
+        },
+        "rules": {
+          "title": "Tone rules",
+          "description": "The first matching rule wins. Patterns are matched against the app name, process name, and website domain. Pick a tone preset from the dropdown, or choose Custom to write your own instruction.",
+          "patternPlaceholder": "e.g. mail.google.com or discord",
+          "tonePlaceholder": "Write a custom tone instruction",
+          "customTone": "Custom…",
+          "add": "Add rule",
+          "remove": "Remove rule",
+          "empty": "No rules yet — the model will pick a tone automatically from the detected app."
+        },
+        "presets": {
+          "title": "Tone presets",
+          "description": "Each preset embeds its own instruction into the cleanup prompt. Click a preset to expand and edit exactly what the model is told for that tone.",
+          "editorHint": "This text is embedded verbatim into the post-processing prompt when a rule selects this tone. Edits save when you click away."
+        }
       }
     },
     "history": {
@@ -534,6 +594,10 @@
         "button": "미리보기",
         "noNotes": "내장 릴리스 노트를 찾을 수 없습니다",
         "error": "릴리스 노트를 미리 볼 수 없습니다"
+      },
+      "clipboardFallback": {
+        "label": "Keep Transcript on Clipboard",
+        "description": "If no text box has focus when pasting, leave the transcription on the clipboard so you can paste it manually"
       }
     },
     "about": {
@@ -568,6 +632,10 @@
         "label": "새 소식 표시",
         "description": "Handy 업데이트 후 릴리스 노트를 표시합니다"
       }
+    },
+    "previewModel": {
+      "label": "Instant preview via streaming model",
+      "description": "When your selected model can't stream, the best installed streaming model powers the live text in the recording overlay while your selected model does the real transcription in the background. Requires a streaming-capable model to be downloaded."
     }
   },
   "footer": {

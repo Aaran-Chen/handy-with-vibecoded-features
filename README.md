@@ -1,6 +1,8 @@
 # Handy — with Vibecoded Features
 
-A heavily customized fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais: a free, open-source, cross-platform speech-to-text app that runs entirely on your own machine. This fork keeps everything Handy does and layers on a local-LLM cleanup pipeline, context-aware tone adaptation, live in-overlay preview, and a pile of quality-of-life and stability fixes — all developed conversationally ("vibecoded") with Claude Code.
+A heavily customized fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais: a free, open-source speech-to-text app that runs entirely on your own machine. This fork keeps everything Handy does and layers on a local-LLM cleanup pipeline, context-aware tone adaptation, live in-overlay preview, and a pile of quality-of-life and stability fixes — all developed conversationally ("vibecoded") with Claude Code.
+
+> **Windows x86_64 only.** Upstream Handy is cross-platform, but this fork is developed and tested exclusively on Windows (x86_64) — several of its headline features (app/website detection, caret probing, smart spacing, the clipboard fallback) are built on Windows UI Automation and have no macOS/Linux implementation. CI builds Windows x86_64 only. If you're on another platform, use [upstream Handy](https://github.com/cjpais/Handy) instead.
 
 Upstream documentation is preserved in [README.upstream.md](README.upstream.md). Everything below documents what this fork adds or changes.
 
@@ -27,18 +29,18 @@ Upstream documentation is preserved in [README.upstream.md](README.upstream.md).
 
 ## Feature Overview
 
-| Feature | What it does |
-| --- | --- |
-| AI cleanup pass | Every transcription can be cleaned by a local LLM (Ollama): filler removed, grammar fixed, numbers converted, lists formatted |
-| Change-of-mind handling | "at 4, wait no, at 3" comes out as "at 3" — the prompt was tuned by automated tournaments against real revision phrasings |
-| Context-aware tone | Detects the app *and website* you're dicting into and adapts tone (casual for Discord, formal for Gmail, etc.) |
-| Tone presets | Six tones from casual to technical, each with its own editable embedded prompt |
-| Live preview | Words appear in the overlay as you speak, with a spinning star while the cleanup model polishes the final text |
-| Dual-model preview | A fast streaming model drives the instant preview while your accurate model transcribes the real thing in parallel |
-| Editable preview | Click the live preview text to edit it mid-dictation; your edit steers the final AI cleanup |
-| Model recommendations | The Models tab recommends models for *your machine*, for accuracy, and for speed, with a language filter |
-| Smart spacing | Pasting right after a period automatically inserts a space first |
-| Tray robustness | The app keeps working after the window is closed, with a hook watchdog and single-instance hardening |
+| Feature                 | What it does                                                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| AI cleanup pass         | Every transcription can be cleaned by a local LLM (Ollama): filler removed, grammar fixed, numbers converted, lists formatted |
+| Change-of-mind handling | "at 4, wait no, at 3" comes out as "at 3" — the prompt was tuned by automated tournaments against real revision phrasings     |
+| Context-aware tone      | Detects the app _and website_ you're dicting into and adapts tone (casual for Discord, formal for Gmail, etc.)                |
+| Tone presets            | Six tones from casual to technical, each with its own editable embedded prompt                                                |
+| Live preview            | Words appear in the overlay as you speak, with a spinning star while the cleanup model polishes the final text                |
+| Dual-model preview      | A fast streaming model drives the instant preview while your accurate model transcribes the real thing in parallel            |
+| Editable preview        | Click the live preview text to edit it mid-dictation; your edit steers the final AI cleanup                                   |
+| Model recommendations   | The Models tab recommends models for _your machine_, for accuracy, and for speed, with a language filter                      |
+| Smart spacing           | Pasting right after a period automatically inserts a space first                                                              |
+| Tray robustness         | The app keeps working after the window is closed, with a hook watchdog and single-instance hardening                          |
 
 ---
 
@@ -72,7 +74,7 @@ Context capture is engineered not to slow dictation: it runs concurrently with r
 
 ## Tone Presets
 
-Six built-in tones, ordered as a spectrum: **casual → friendly → neutral → formal → professional → technical**. Each preset carries its own embedded prompt describing exactly how that tone should transform text, and every one of those prompts is editable in an expandable editor in settings — so "casual" can mean *your* casual.
+Six built-in tones, ordered as a spectrum: **casual → friendly → neutral → formal → professional → technical**. Each preset carries its own embedded prompt describing exactly how that tone should transform text, and every one of those prompts is editable in an expandable editor in settings — so "casual" can mean _your_ casual.
 
 ## Live Preview Overlay
 
@@ -118,12 +120,12 @@ Things that broke and are now fixed properly:
 - **Dead hotkeys after closing the window.** Windows silently removes low-level keyboard hooks whose callbacks run long; a watchdog re-arms the hooks every 60 seconds and on window close, so the tray icon you see always means a hotkey that works
 - **Duplicate instances.** The single-instance helper window could be destroyed by a stray `WM_CLOSE`, letting multiple instances pile up with clashing keyboard hooks; the vendored plugin now ignores `WM_CLOSE` (this fix belongs upstream in `tauri-plugin-single-instance` and is vendored here until then)
 - **GPU crashes with two models.** Concurrent Vulkan backend loads fastfail inside `vulkan-1.dll` (0xc0000409), and a model load racing another model's streaming decode corrupts the heap (0xc0000374 in `ntdll`) — both observed live. One process-wide engine-operation lock serializes loads, streaming decode steps, and batch runs; decode steps are milliseconds, so the serialization is imperceptible
-- **Instruction echo from small models.** Context and user-edit blocks are *prepended* to the prompt, never appended — small local models tend to echo trailing instructions into their output. Reasoning-model think-blocks are stripped as a second line of defense
+- **Instruction echo from small models.** Context and user-edit blocks are _prepended_ to the prompt, never appended — small local models tend to echo trailing instructions into their output. Reasoning-model think-blocks are stripped as a second line of defense
 - **Flat model files.** Model files dropped flat into the models directory (rather than HF-cache layout) are recognized as installed and loadable
 
 ## Building This Fork (Windows)
 
-Prerequisites: Rust (stable), [Bun](https://bun.sh), CMake, and the Vulkan SDK. For the cleanup features you'll also want [Ollama](https://ollama.com) running locally with a model pulled (`qwen2.5:7b` is the sweet spot for quality vs. latency on a strong GPU).
+Windows x86_64 is the only supported target. Prerequisites: Rust (stable), [Bun](https://bun.sh), CMake, and the Vulkan SDK. For the cleanup features you'll also want [Ollama](https://ollama.com) running locally with a model pulled (`qwen2.5:7b` is the sweet spot for quality vs. latency on a strong GPU).
 
 ```
 bun install
@@ -141,18 +143,18 @@ For development, `bun run tauri dev` works as upstream documents.
 
 For anyone reading the code, the fork's moving parts live here:
 
-| Area | Where |
-| --- | --- |
-| Cleanup pipeline, context blocks, revision prompt | `src-tauri/src/actions.rs`, defaults in `src-tauri/src/settings.rs` |
-| App/website capture (UIA), caret probing | `src-tauri/src/app_context.rs` |
-| Streaming, chunked preview, engine-op lock | `src-tauri/src/managers/transcription.rs` |
-| Dual-model preview manager | `PreviewTranscription` state in `src-tauri/src/lib.rs` |
-| Ollama model catalog and pulls | `src-tauri/src/commands/post_process_models.rs` |
-| Editable preview commands | `src-tauri/src/commands/preview_edit.rs` |
-| Overlay UI (preview, wheel warp, edit box) | `src/overlay/RecordingOverlay.tsx` / `.css` |
-| Models tab, recommendations | `src/components/settings/models/`, `src/lib/utils/recommend.ts` |
-| Tone rules and preset editors | `src/components/settings/post-processing/PostProcessingSettings.tsx` |
-| Vendored single-instance fix | `src-tauri/vendor/tauri-plugin-single-instance` |
+| Area                                              | Where                                                                |
+| ------------------------------------------------- | -------------------------------------------------------------------- |
+| Cleanup pipeline, context blocks, revision prompt | `src-tauri/src/actions.rs`, defaults in `src-tauri/src/settings.rs`  |
+| App/website capture (UIA), caret probing          | `src-tauri/src/app_context.rs`                                       |
+| Streaming, chunked preview, engine-op lock        | `src-tauri/src/managers/transcription.rs`                            |
+| Dual-model preview manager                        | `PreviewTranscription` state in `src-tauri/src/lib.rs`               |
+| Ollama model catalog and pulls                    | `src-tauri/src/commands/post_process_models.rs`                      |
+| Editable preview commands                         | `src-tauri/src/commands/preview_edit.rs`                             |
+| Overlay UI (preview, wheel warp, edit box)        | `src/overlay/RecordingOverlay.tsx` / `.css`                          |
+| Models tab, recommendations                       | `src/components/settings/models/`, `src/lib/utils/recommend.ts`      |
+| Tone rules and preset editors                     | `src/components/settings/post-processing/PostProcessingSettings.tsx` |
+| Vendored single-instance fix                      | `src-tauri/vendor/tauri-plugin-single-instance`                      |
 
 The fork follows upstream's conventions: one Tauri command per setting with a matching `settingUpdaters` entry, tauri-specta bindings (`src/bindings.ts` is maintained by hand here since specta export is debug-only), i18next for all UI strings, and conventional commits.
 
