@@ -200,16 +200,31 @@
 .stext-clip {
   overflow: hidden;
   min-height: 0;
-  /* Dial/wheel warp: the newest line at the bottom sits flat in-plane while
-     older lines lean away and shrink as they ride up, like text printed on
-     the face of a rolling wheel. The deep top fade below completes the
-     "rolling over the edge" dissolve. */
-  perspective: 210px;
-  perspective-origin: 50% 100%;
 }
-.stext-cap {
-  transform: rotateX(18deg);
-  transform-origin: 50% 100%;
+/* Picker-wheel lines (iOS clock dial): each measured line is its own element,
+   rotated in 3D by its distance from the newest line — flat at the bottom
+   focus, leaning progressively back and dimming as it rides up the drum. The
+   transform (with per-line perspective) and opacity are driven from JS; the
+   transition here is what makes the roll read as rotation. */
+.sline {
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transition:
+    transform 160ms ease-out,
+    opacity 160ms ease-out;
+}
+/* Bottom-anchor short text (the flex spacer role the old `p` margin played). */
+.sline:first-child {
+  margin-top: auto;
+}
+/* Hidden single-line measurer used to wrap words into drum lines; inherits
+   the cap's font so measurements match rendering exactly. */
+.smeasure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .stext-cap {
   max-height: var(--ov-cap-max-h);

@@ -45,6 +45,16 @@ const RecordingOverlay: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
+  // Drum preview: the live text is split into measured visual lines, each
+  // rendered as its own element so it can rotate like a segment of a picker
+  // wheel (iOS-clock style) as it rides up. `tentativeFrom` marks where the
+  // tentative (dimmer) region starts inside a line, or null if fully
+  // committed.
+  const [lines, setLines] = useState<
+    { text: string; tentativeFrom: number | null }[]
+  >([]);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   // Live-text scroll-back: the text region "sticks" to the newest line while the
@@ -130,6 +140,74 @@ const RecordingOverlay: React.FC = () => {
     return () => clearInterval(id);
   }, [state, isVisible]);
 
+  // Split the live text into visual lines by measuring words against the
+  // panel width with a hidden element that inherits the same font.
+  useLayoutEffect(() => {
+    const measurer = measureRef.current;
+    const cap = capRef.current;
+    if (!measurer || !cap) {
+      return;
+    }
+    const committed = streamText.committed;
+    const joiner = committed && streamText.tentative ? " " : "";
+    const full = `${committed}${joiner}${streamText.tentative}`;
+    const maxWidth = cap.clientWidth - 4;
+    const words = full.length ? full.split(" ") : [];
+    const next: { text: string; tentativeFrom: number | null }[] = [];
+    let line = "";
+    let lineStart = 0;
+    let cursor = 0; // index of the next word's first char within `full`
+    const pushLine = () => {
+      if (!line) return;
+      const start = lineStart;
+      const commLen = committed.length;
+      let tentativeFrom: number | null = null;
+      if (start + line.length > commLen) {
+        tentativeFrom = Math.max(0, commLen - start);
+      }
+      next.push({ text: line, tentativeFrom });
+    };
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      measurer.textContent = candidate;
+      if (line && measurer.offsetWidth > maxWidth) {
+        pushLine();
+        line = word;
+        lineStart = cursor;
+      } else {
+        line = candidate;
+      }
+      cursor += word.length + 1; // +1 for the split-out space
+    }
+    pushLine();
+    setLines(next);
+  }, [streamText]);
+
+  // Rotate each line by its distance from the newest (bottom) line, like the
+  // face of a wheel seen edge-on: the focused line is flat, older lines lean
+  // back and dim as they ride up over the top.
+  const applyDrum = () => {
+    const cap = capRef.current;
+    if (!cap) return;
+    const capRect = cap.getBoundingClientRect();
+    const first = lineRefs.current.find(Boolean);
+    const lineH = first?.offsetHeight || 18;
+    const focusY = capRect.bottom - 12 - lineH / 2;
+    for (const el of lineRefs.current) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const dist = (focusY - (r.top + r.bottom) / 2) / lineH;
+      const angle = Math.max(-20, Math.min(80, dist * 24));
+      const depth = -Math.abs(dist) * 6;
+      // Per-line perspective: the scroll container (overflow: auto) flattens
+      // any ancestor 3D context, so each line carries its own vanishing point.
+      el.style.transform = `perspective(300px) rotateX(${angle}deg) translateZ(${depth}px)`;
+      el.style.opacity = String(
+        Math.max(0.1, Math.cos((angle * Math.PI) / 180)),
+      );
+    }
+  };
+
   // Stick to the bottom as text streams in — but only while pinned, so a user who
   // has scrolled up to read history isn't yanked back down by the next chunk.
   useLayoutEffect(() => {
@@ -138,7 +216,8 @@ const RecordingOverlay: React.FC = () => {
     // Fade the top edge only once text actually overflows the cap.
     setOverflowing(el.scrollHeight > el.clientHeight + 1);
     if (pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [streamText]);
+    applyDrum();
+  }, [lines]);
 
   // Each fresh streaming session starts pinned to the bottom, fade cleared.
   useEffect(() => {
@@ -147,10 +226,12 @@ const RecordingOverlay: React.FC = () => {
   }, [session]);
 
   // Re-pin when the user is within ~a line of the bottom; unpin otherwise.
+  // Scrolling also re-solves the drum so lines rotate through the wheel live.
   const handleStreamScroll = () => {
     const el = capRef.current;
     if (!el) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 16;
+    applyDrum();
   };
 
   const fmtTime = (s: number) =>
@@ -291,15 +372,39 @@ const RecordingOverlay: React.FC = () => {
                   onScroll={handleStreamScroll}
                   onClick={beginEdit}
                 >
-                  <p>
-                    <span className="committed">
-                      {streamText.committed ? streamText.committed + " " : ""}
-                    </span>
-                    <span className="tentative">{streamText.tentative}</span>
-                    {/* Drop the blinking caret once finalizing — it's no longer
-                        capturing, and a static star conveys the work. */}
-                    {!working && <span className="scaret" />}
-                  </p>
+                  {lines.map((line, i) => (
+                    <div
+                      key={i}
+                      className="sline"
+                      ref={(el) => {
+                        lineRefs.current[i] = el;
+                      }}
+                    >
+                      {line.tentativeFrom === null ? (
+                        <span className="committed">{line.text}</span>
+                      ) : (
+                        <>
+                          <span className="committed">
+                            {line.text.slice(0, line.tentativeFrom)}
+                          </span>
+                          <span className="tentative">
+                            {line.text.slice(line.tentativeFrom)}
+                          </span>
+                        </>
+                      )}
+                      {/* Drop the blinking caret once finalizing — it's no
+                          longer capturing, and a static star conveys the work. */}
+                      {i === lines.length - 1 && !working && (
+                        <span className="scaret" />
+                      )}
+                    </div>
+                  ))}
+                  {lines.length === 0 && (
+                    <div className="sline">
+                      {!working && <span className="scaret" />}
+                    </div>
+                  )}
+                  <div className="smeasure" ref={measureRef} aria-hidden />
                 </div>
               )}
             </div>
