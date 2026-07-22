@@ -95,6 +95,20 @@ enum StreamCmd {
 
 /// Routes real-time audio frames to the active streaming worker. Shared between
 /// the [`TranscriptionManager`] (opens/closes the route) and the audio recorder's
+/// One engine operation at a time, process-wide. Concurrent native engine work
+/// from the dual-model preview crashes the process: two backend loads fastfail
+/// inside vulkan-1.dll (0xc0000409), and a model load racing another model's
+/// streaming decode corrupts the heap (0xc0000374 in ntdll, both observed
+/// live). Decode steps are milliseconds and loads are rare, so serializing
+/// them is invisible next to the crashes it prevents.
+static ENGINE_OP_LOCK: Mutex<()> = Mutex::new(());
+
+fn engine_op_guard() -> std::sync::MutexGuard<'static, ()> {
+    ENGINE_OP_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// per-frame callback (feeds frames). The recorder holds an `Arc<StreamRouter>`
 /// directly, so a frame with no stream pending costs a single relaxed atomic
 /// load — no Tauri state lookup, no mutex lock.
@@ -468,15 +482,8 @@ impl TranscriptionManager {
         model_id: &str,
         device_index: Option<usize>,
     ) -> Result<()> {
-        // Serialize engine loads process-wide: with the dual-model preview,
-        // the primary and preview managers can otherwise initialize their
-        // Vulkan backends concurrently, which crashes inside vulkan-1.dll
-        // (0xc0000409 fastfail, observed live). Loads are rare and fast; a
-        // global mutex costs nothing.
-        static ENGINE_LOAD_LOCK: Mutex<()> = Mutex::new(());
-        let _load_guard = ENGINE_LOAD_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Serialize against every other engine operation (see ENGINE_OP_LOCK).
+        let _load_guard = engine_op_guard();
 
         apply_accelerator_settings(&self.app_handle);
 
@@ -971,7 +978,11 @@ impl TranscriptionManager {
                         self.touch_activity();
                         perf.record_feed(pcm.len());
                         let feed_start = Instant::now();
-                        match stream.feed(&pcm) {
+                        let feed_result = {
+                            let _op = engine_op_guard();
+                            stream.feed(&pcm)
+                        };
+                        match feed_result {
                             Ok(update) => {
                                 perf.record_compute(feed_start.elapsed());
                                 perf.record_update(
@@ -995,7 +1006,11 @@ impl TranscriptionManager {
                     }
                     StreamCmd::Finalize(reply) => {
                         let finalize_start = Instant::now();
-                        let result = match stream.finalize() {
+                        let finalize_res = {
+                            let _op = engine_op_guard();
+                            stream.finalize()
+                        };
+                        let result = match finalize_res {
                             // After finalize the committed prefix holds the full
                             // text; display() = committed + tentative is the safe read.
                             Ok(update) => {
@@ -1251,6 +1266,8 @@ impl TranscriptionManager {
                 );
             }
 
+            // Batch runs also serialize against loads and streaming decodes.
+            let _op = engine_op_guard();
             let transcribe_result = catch_unwind(AssertUnwindSafe(|| -> Result<String> {
                 match &mut engine {
                     LoadedEngine::TranscribeCpp(session) => {
