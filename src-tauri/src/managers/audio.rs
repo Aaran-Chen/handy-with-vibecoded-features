@@ -132,6 +132,7 @@ fn create_audio_recorder(
     vad_path: &Path,
     app_handle: &tauri::AppHandle,
     stream_router: Arc<StreamRouter>,
+    preview_router: Arc<StreamRouter>,
     preview_buf: Arc<Mutex<Vec<f32>>>,
 ) -> Result<AudioRecorder, anyhow::Error> {
     // A single Silero engine covers both the offline and streaming policies (never
@@ -164,8 +165,13 @@ fn create_audio_recorder(
         })
         .with_audio_callback({
             let router = stream_router;
+            let preview = preview_router;
             move |frame| {
                 router.feed(frame);
+                // Second router for the dedicated preview manager (fast
+                // streaming model driving the ghost while the real model
+                // transcribes). Feeding an idle router is a no-op.
+                preview.feed(frame);
                 // Mirror frames into the preview buffer so chunked ghost
                 // previews work for non-streaming models too. Bounded: keep
                 // at most the last ~90s (16 kHz mono f32).
@@ -198,6 +204,9 @@ pub struct AudioRecordingManager {
     close_generation: Arc<AtomicU64>,
     cancel_generation: Arc<AtomicU64>,
     stream_router: Arc<StreamRouter>,
+    /// Router for the dedicated preview transcription manager (dual-model
+    /// instant preview).
+    preview_router: Arc<StreamRouter>,
     /// Real-time mirror of the current recording's (VAD-filtered) samples,
     /// consumed by the chunked ghost preview for non-streaming models.
     preview_buf: Arc<Mutex<Vec<f32>>>,
@@ -216,6 +225,7 @@ impl AudioRecordingManager {
     pub fn new(
         app: &tauri::AppHandle,
         stream_router: Arc<StreamRouter>,
+        preview_router: Arc<StreamRouter>,
     ) -> Result<Self, anyhow::Error> {
         let settings = get_settings(app);
         let mode = if settings.always_on_microphone {
@@ -236,6 +246,7 @@ impl AudioRecordingManager {
             close_generation: Arc::new(AtomicU64::new(0)),
             cancel_generation: Arc::new(AtomicU64::new(0)),
             stream_router,
+            preview_router,
             preview_buf: Arc::new(Mutex::new(Vec::new())),
             cached_device: Arc::new(Mutex::new(None)),
         };
@@ -377,6 +388,7 @@ impl AudioRecordingManager {
                 &vad_path,
                 &self.app_handle,
                 Arc::clone(&self.stream_router),
+                Arc::clone(&self.preview_router),
                 Arc::clone(&self.preview_buf),
             )?);
         }

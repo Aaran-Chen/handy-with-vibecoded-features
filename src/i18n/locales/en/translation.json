@@ -270,6 +270,10 @@
         "description": "Adjust the volume of audio feedback sounds"
       }
     },
+    "previewModel": {
+      "label": "Instant preview via streaming model",
+      "description": "When your selected model can't stream, the best installed streaming model powers the live cursor preview while your selected model does the real transcription in the background. Requires a streaming-capable model to be downloaded."
+    },
     "inlinePreview": {
       "label": "Preview at cursor",
       "description": "Shows a half-opacity live preview of what you're saying right at the text cursor, then a spinning star while the AI cleanup runs, before the final text is pasted. Works with every model; streaming models update the preview fastest."

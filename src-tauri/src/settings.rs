@@ -461,6 +461,11 @@ pub struct AppSettings {
     // at the text cursor while dictating, spinner while post-processing.
     #[serde(default = "default_inline_preview")]
     pub inline_preview: bool,
+    // Dual-model instant preview: when the selected model can't stream, use
+    // the best installed streaming model to drive the live ghost preview
+    // while the selected model does the real transcription.
+    #[serde(default)]
+    pub preview_model_enabled: bool,
     #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
@@ -1007,6 +1012,7 @@ pub fn get_default_settings() -> AppSettings {
         context_tone_rules: default_context_tone_rules(),
         tone_presets: default_tone_presets(),
         inline_preview: default_inline_preview(),
+        preview_model_enabled: false,
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),

@@ -1307,7 +1307,10 @@ impl ModelManager {
 
         for model in models.values_mut() {
             if let ModelSource::HuggingFace { repo_id, revision } = &model.source {
-                model.is_downloaded = hf_cached_path(repo_id, revision, &model.filename).is_some();
+                // A user-dropped copy of the catalog file in the flat models
+                // dir counts too — the load path already resolves it there.
+                model.is_downloaded = hf_cached_path(repo_id, revision, &model.filename).is_some()
+                    || self.models_dir.join(&model.filename).exists();
                 model.is_downloading = false;
                 model.partial_size = 0;
                 continue;
@@ -2285,9 +2288,16 @@ impl ModelManager {
         }
 
         if let ModelSource::HuggingFace { repo_id, revision } = &model_info.source {
-            return hf_cached_path(repo_id, revision, &model_info.filename).ok_or_else(|| {
-                anyhow::anyhow!("Complete model file not found in HF cache: {}", model_id)
-            });
+            // Same flat-models-dir fallback as update_download_status: a
+            // user-dropped copy of the catalog file is loadable directly.
+            return hf_cached_path(repo_id, revision, &model_info.filename)
+                .or_else(|| {
+                    let flat = self.models_dir.join(&model_info.filename);
+                    flat.exists().then_some(flat)
+                })
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Complete model file not found in HF cache: {}", model_id)
+                });
         }
 
         let model_path = self.models_dir.join(&model_info.filename);

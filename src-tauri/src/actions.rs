@@ -63,6 +63,21 @@ pub fn stop_chunked_preview() {
     }
 }
 
+/// Best installed streaming model to drive the dual-model instant preview:
+/// highest accuracy among downloaded streaming-capable models.
+fn pick_preview_streaming_model(app: &AppHandle) -> Option<String> {
+    let mm = app.state::<Arc<ModelManager>>();
+    mm.get_available_models()
+        .into_iter()
+        .filter(|m| m.is_downloaded && m.supports_streaming)
+        .max_by(|a, b| {
+            a.accuracy_score
+                .partial_cmp(&b.accuracy_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|m| m.id)
+}
+
 /// Live-ish preview for models without native streaming: periodically batch-
 /// transcribe the audio captured so far (bounded to the most recent window)
 /// and emit the result through the same StreamTextEvent the ghost preview
@@ -798,16 +813,35 @@ impl ShortcutAction for TranscribeAction {
             tm.start_stream();
         }
 
+        // Dual-model instant preview: when enabled and the selected model
+        // can't stream, pin the secondary manager to the best installed
+        // streaming model and stream it for the ghost — the selected model
+        // still does the real transcription at stop.
+        let mut preview_stream_started = false;
+        if settings.inline_preview && settings.preview_model_enabled && !model_supports_streaming {
+            if let Some(preview_id) = pick_preview_streaming_model(app) {
+                let ptm = Arc::clone(&app.state::<crate::PreviewTranscription>().0);
+                ptm.set_model_override(Some(preview_id.clone()));
+                ptm.initiate_model_load();
+                ptm.start_stream();
+                preview_stream_started = true;
+                debug!("Instant preview streaming with '{preview_id}'");
+            } else {
+                debug!("Instant preview enabled but no streaming model is installed");
+            }
+        }
+
         // Caret ghost preview: live half-opacity transcription at the text
-        // cursor. Streaming models feed it natively; everything else gets
-        // chunked passes over the audio captured so far. Positioned on a
-        // background thread — the caret lookup can involve a UIA round-trip.
+        // cursor. Streaming models (or the dedicated preview stream) feed it
+        // natively; everything else gets chunked passes over the audio
+        // captured so far. Positioned on a background thread — the caret
+        // lookup can involve a UIA round-trip.
         if settings.inline_preview {
             let ah_ghost = app.clone();
             std::thread::spawn(move || {
                 crate::ghost::show_at_caret(&ah_ghost, "listening");
             });
-            if !model_supports_streaming {
+            if !model_supports_streaming && !preview_stream_started {
                 spawn_chunked_preview(app.clone());
             }
         }
@@ -916,8 +950,11 @@ impl ShortcutAction for TranscribeAction {
         shortcut::unregister_cancel_shortcut(app);
 
         // Stop the chunked preview loop promptly so an in-flight pass is the
-        // only thing the final transcription can wait on.
+        // only thing the final transcription can wait on, and tear down the
+        // dual-model preview stream (its text is preview-only; the ghost
+        // switches to the spinner now anyway). Tolerant no-ops when inactive.
         stop_chunked_preview();
+        app.state::<crate::PreviewTranscription>().0.cancel_stream();
 
         let stop_time = Instant::now();
         debug!("TranscribeAction::stop called for binding: {}", binding_id);

@@ -42,6 +42,10 @@ use std::sync::Arc;
 use tauri::image::Image;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
+/// Secondary transcription manager pinned to a fast streaming model, used to
+/// drive the instant ghost preview while the user's real model transcribes.
+pub struct PreviewTranscription(pub Arc<TranscriptionManager>);
+
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
@@ -163,9 +167,20 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         TranscriptionManager::new(app_handle, model_manager.clone())
             .expect("Failed to initialize transcription manager"),
     );
+    // Secondary manager for the dual-model instant preview: pinned to a fast
+    // streaming model at dictation start; its router receives the same
+    // real-time frames as the primary.
+    let preview_manager = Arc::new(
+        TranscriptionManager::new(app_handle, model_manager.clone())
+            .expect("Failed to initialize preview transcription manager"),
+    );
     let recording_manager = Arc::new(
-        AudioRecordingManager::new(app_handle, transcription_manager.stream_router())
-            .expect("Failed to initialize recording manager"),
+        AudioRecordingManager::new(
+            app_handle,
+            transcription_manager.stream_router(),
+            preview_manager.stream_router(),
+        )
+        .expect("Failed to initialize recording manager"),
     );
     let history_manager =
         Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
@@ -181,6 +196,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(recording_manager.clone());
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
+    app_handle.manage(PreviewTranscription(preview_manager));
     app_handle.manage(history_manager.clone());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
@@ -590,6 +606,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::update_context_tone_rules,
             shortcut::update_tone_presets,
             shortcut::change_inline_preview_setting,
+            shortcut::change_preview_model_enabled_setting,
             shortcut::change_app_language_setting,
             shortcut::change_update_checks_setting,
             shortcut::change_show_whats_new_on_update_setting,

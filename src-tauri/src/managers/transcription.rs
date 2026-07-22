@@ -257,6 +257,11 @@ pub struct TranscriptionManager {
     /// `is_model_loaded()` consults this so the model still reports "loaded"
     /// while the worker holds it.
     active_engine_lease: Arc<AtomicU64>,
+    /// When set, this manager loads the given model instead of
+    /// `settings.selected_model`. Used by the secondary preview manager so a
+    /// fast streaming model can drive the live ghost preview while the user's
+    /// real model handles the actual transcription.
+    model_override: Arc<Mutex<Option<String>>>,
 }
 
 impl TranscriptionManager {
@@ -277,6 +282,7 @@ impl TranscriptionManager {
             next_stream_worker_id: Arc::new(AtomicU64::new(1)),
             active_stream_worker: Arc::new(AtomicU64::new(0)),
             active_engine_lease: Arc::new(AtomicU64::new(0)),
+            model_override: Arc::new(Mutex::new(None)),
         };
 
         // Start the idle watcher
@@ -462,6 +468,16 @@ impl TranscriptionManager {
         model_id: &str,
         device_index: Option<usize>,
     ) -> Result<()> {
+        // Serialize engine loads process-wide: with the dual-model preview,
+        // the primary and preview managers can otherwise initialize their
+        // Vulkan backends concurrently, which crashes inside vulkan-1.dll
+        // (0xc0000409 fastfail, observed live). Loads are rare and fast; a
+        // global mutex costs nothing.
+        static ENGINE_LOAD_LOCK: Mutex<()> = Mutex::new(());
+        let _load_guard = ENGINE_LOAD_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
         apply_accelerator_settings(&self.app_handle);
 
         let load_start = std::time::Instant::now();
@@ -714,8 +730,13 @@ impl TranscriptionManager {
                     .reload_model_on_next_use
                     .store(false, Ordering::Release);
             }
-            let settings = get_settings(&self_clone.app_handle);
-            if let Err(e) = self_clone.load_model(&settings.selected_model) {
+            let target = self_clone
+                .model_override
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| get_settings(&self_clone.app_handle).selected_model);
+            if let Err(e) = self_clone.load_model(&target) {
                 error!("Failed to load model: {}", e);
             }
             let mut is_loading = self_clone.is_loading.lock().unwrap();
@@ -727,6 +748,18 @@ impl TranscriptionManager {
     pub fn get_current_model(&self) -> Option<String> {
         let current_model = self.current_model_id.lock().unwrap();
         current_model.clone()
+    }
+
+    /// Pin this manager to a specific model id (or clear the pin with None),
+    /// overriding `settings.selected_model` on subsequent loads. If a
+    /// different model is currently loaded, the next use reloads.
+    pub fn set_model_override(&self, model_id: Option<String>) {
+        let mut slot = self.model_override.lock().unwrap();
+        let changed = *slot != model_id;
+        *slot = model_id;
+        if changed {
+            self.reload_model_on_next_use.store(true, Ordering::Release);
+        }
     }
 
     /// The compute backend the currently-loaded engine is bound to, for

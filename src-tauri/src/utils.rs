@@ -25,9 +25,12 @@ pub fn cancel_current_operation(app: &AppHandle) {
     let recording_was_active = audio_manager.is_recording();
     audio_manager.cancel_recording();
 
-    // Abandon any live streaming transcription
+    // Abandon any live streaming transcription (primary and preview)
     let tm = app.state::<Arc<TranscriptionManager>>();
     tm.cancel_stream();
+    if let Some(ptm) = app.try_state::<crate::PreviewTranscription>() {
+        ptm.0.cancel_stream();
+    }
 
     // Update tray icon and hide overlay + ghost preview
     change_tray_icon(app, crate::tray::TrayIconState::Idle);
