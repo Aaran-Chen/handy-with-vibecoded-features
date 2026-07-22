@@ -480,57 +480,72 @@ fn caret_rect_uia() -> Option<(f64, f64, f64, f64)> {
                 return None;
             }
         };
-        let tp2 = match focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
-        {
-            Ok(tp) => tp,
-            Err(e) => {
-                log::debug!("caret: focused element has no TextPattern2: {e}");
-                return None;
-            }
-        };
-        let mut is_active = BOOL::default();
-        let range = match tp2.GetCaretRange(&mut is_active) {
-            Ok(r) => r,
-            Err(e) => {
-                log::debug!("caret: GetCaretRange failed: {e}");
-                return None;
-            }
-        };
+        // Tier 1: TextPattern2's true caret range.
+        let caret_range =
+            match focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id) {
+                Ok(tp2) => {
+                    let mut is_active = BOOL::default();
+                    tp2.GetCaretRange(&mut is_active).ok()
+                }
+                Err(e) => {
+                    log::debug!("caret: no TextPattern2 ({e}); trying TextPattern");
+                    None
+                }
+            };
 
-        // Preferred: measure the character just LEFT of the caret — the same
-        // maneuver char_before_caret uses (empirically supported where
-        // ExpandToEnclosingUnit on a collapsed caret is not). The caret sits
-        // at that character's right edge.
-        if let Ok(prev) = range.Clone() {
-            let moved = prev
-                .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -1)
-                .unwrap_or(0);
-            if moved != 0 {
-                if let Some((left, top, width, height)) = first_range_rect(&automation, &prev) {
-                    return Some((left + width, top, 2.0, height));
+        // Tier 2: TextPattern (v1) selection — its start coincides with the
+        // caret when nothing is selected. Some apps expose only this.
+        let caret_range = caret_range.or_else(|| {
+            use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
+            let tp = focused
+                .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+                .ok()?;
+            let ranges = tp.GetSelection().ok()?;
+            if ranges.Length().ok()? == 0 {
+                return None;
+            }
+            ranges.GetElement(0).ok()
+        });
+
+        if let Some(range) = caret_range {
+            // Preferred: measure the character just LEFT of the caret — the
+            // same maneuver char_before_caret uses. The caret sits at that
+            // character's right edge.
+            if let Ok(prev) = range.Clone() {
+                let moved = prev
+                    .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -1)
+                    .unwrap_or(0);
+                if moved != 0 {
+                    if let Some((left, top, width, height)) = first_range_rect(&automation, &prev) {
+                        return Some((left + width, top, 2.0, height));
+                    }
+                }
+            }
+            // Next: expand the caret range itself to the enclosing character
+            // (covers caret-at-start-of-text, where there is no previous char).
+            if let Ok(expanded) = range.Clone() {
+                let _ = expanded.ExpandToEnclosingUnit(TextUnit_Character);
+                if let Some((left, top, _width, height)) = first_range_rect(&automation, &expanded)
+                {
+                    return Some((left, top, 2.0, height));
                 }
             }
         }
 
-        // Next: expand the caret range itself to the enclosing character
-        // (covers caret-at-start-of-text, where there is no previous char).
-        if let Ok(expanded) = range.Clone() {
-            let _ = expanded.ExpandToEnclosingUnit(TextUnit_Character);
-            if let Some((left, top, _width, height)) = first_range_rect(&automation, &expanded) {
-                return Some((left, top, 2.0, height));
-            }
-        }
-
-        // Last resort: the focused element's own rect — left edge, a typical
-        // line height. Keeps the spinner near the field even when the exact
-        // caret cannot be measured (e.g. empty field in some frameworks).
+        // Tier 3: no usable text pattern — anchor to the focused element's
+        // own rect (bottom-left, one line up) so the preview still appears
+        // by the field instead of not at all.
         match focused.CurrentBoundingRectangle() {
-            Ok(el_rect) => Some((
-                el_rect.left as f64 + 6.0,
-                el_rect.top as f64 + 6.0,
-                2.0,
-                ((el_rect.bottom - el_rect.top) as f64 - 12.0).clamp(14.0, 28.0),
-            )),
+            Ok(el_rect) => {
+                let height = ((el_rect.bottom - el_rect.top) as f64).clamp(14.0, 28.0);
+                let line_h = height.min(24.0);
+                Some((
+                    el_rect.left as f64 + 8.0,
+                    (el_rect.bottom as f64 - line_h - 6.0).max(el_rect.top as f64 + 4.0),
+                    2.0,
+                    line_h,
+                ))
+            }
             Err(e) => {
                 log::debug!("caret: element bounding rect failed: {e}");
                 None
