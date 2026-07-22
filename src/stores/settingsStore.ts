@@ -161,8 +161,6 @@ const settingUpdaters: {
   context_tone_rules: (value) =>
     commands.updateContextToneRules(value as ToneRule[]),
   tone_presets: (value) => commands.updateTonePresets(value as TonePreset[]),
-  inline_preview: (value) =>
-    commands.changeInlinePreviewSetting(value as boolean),
   preview_model_enabled: (value) =>
     commands.changePreviewModelEnabledSetting(value as boolean),
   show_tray_icon: (value) =>

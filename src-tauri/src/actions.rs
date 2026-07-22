@@ -34,12 +34,9 @@ struct RecordingErrorEvent {
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
-/// Also tears down the caret ghost preview, so it disappears on every exit
-/// path (paste, cancel, error) without per-path bookkeeping.
 struct FinishGuard(AppHandle);
 impl Drop for FinishGuard {
     fn drop(&mut self) {
-        crate::ghost::hide(&self.0);
         if let Some(c) = self.0.try_state::<TranscriptionCoordinator>() {
             c.notify_processing_finished();
         }
@@ -61,6 +58,19 @@ pub fn stop_chunked_preview() {
             flag.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
+}
+
+/// Whether a chunked preview loop is currently live (spawned and not yet
+/// told to stop). Used to keep the Live overlay panel through finalization.
+fn chunked_preview_active() -> bool {
+    CHUNKED_PREVIEW_STOP
+        .lock()
+        .ok()
+        .and_then(|slot| {
+            slot.as_ref()
+                .map(|flag| !flag.load(std::sync::atomic::Ordering::SeqCst))
+        })
+        .unwrap_or(false)
 }
 
 /// Best installed streaming model to drive the dual-model instant preview:
@@ -815,10 +825,10 @@ impl ShortcutAction for TranscribeAction {
 
         // Dual-model instant preview: when enabled and the selected model
         // can't stream, pin the secondary manager to the best installed
-        // streaming model and stream it for the ghost — the selected model
-        // still does the real transcription at stop.
+        // streaming model and stream it into the Live overlay — the selected
+        // model still does the real transcription at stop.
         let mut preview_stream_started = false;
-        if settings.inline_preview && settings.preview_model_enabled && !model_supports_streaming {
+        if settings.preview_model_enabled && !model_supports_streaming {
             if let Some(preview_id) = pick_preview_streaming_model(app) {
                 let ptm = Arc::clone(&app.state::<crate::PreviewTranscription>().0);
                 ptm.set_model_override(Some(preview_id.clone()));
@@ -831,28 +841,23 @@ impl ShortcutAction for TranscribeAction {
             }
         }
 
-        // Caret ghost preview: live half-opacity transcription at the text
-        // cursor. Streaming models (or the dedicated preview stream) feed it
-        // natively; everything else gets chunked passes over the audio
-        // captured so far. Positioned on a background thread — the caret
-        // lookup can involve a UIA round-trip.
-        if settings.inline_preview {
-            let ah_ghost = app.clone();
-            std::thread::spawn(move || {
-                crate::ghost::show_at_caret(&ah_ghost, "listening");
-            });
-            if !model_supports_streaming && !preview_stream_started {
-                spawn_chunked_preview(app.clone());
-            }
+        // Without any stream, the Live overlay still gets live text via
+        // chunked batch passes over the audio captured so far.
+        let live_preview_via_chunks = settings.overlay_style == OverlayStyle::Live
+            && !model_supports_streaming
+            && !preview_stream_started;
+        if live_preview_via_chunks {
+            spawn_chunked_preview(app.clone());
         }
         let plan_elapsed = plan_started.elapsed();
 
-        // Sizing the overlay follows the same advertised capability. A model that
-        // doesn't stream (or whose capability is not known yet) gets the compact
-        // pill instead of an oversized transparent live window.
+        // The Live panel opens whenever live text will flow — native stream,
+        // dual-model preview stream, or chunked preview passes.
         let overlay_started = Instant::now();
+        let live_text_flows =
+            model_supports_streaming || preview_stream_started || live_preview_via_chunks;
         match settings.overlay_style {
-            OverlayStyle::Live if model_supports_streaming => utils::show_streaming_overlay(app),
+            OverlayStyle::Live if live_text_flows => utils::show_streaming_overlay(app),
             OverlayStyle::Live | OverlayStyle::Minimal => show_recording_overlay(app),
             OverlayStyle::None => {} // show_overlay_state no-ops on None anyway
         }
@@ -917,7 +922,8 @@ impl ShortcutAction for TranscribeAction {
         } else {
             // Starting failed (for example due to blocked microphone permissions).
             // Revert UI state so we don't stay stuck in the recording overlay.
-            crate::ghost::hide(app);
+            stop_chunked_preview();
+            app.state::<crate::PreviewTranscription>().0.cancel_stream();
             tm.cancel_stream();
             utils::hide_recording_overlay(app);
             change_tray_icon(app, TrayIconState::Idle);
@@ -949,12 +955,16 @@ impl ShortcutAction for TranscribeAction {
         // Unregister the cancel shortcut when transcription stops
         shortcut::unregister_cancel_shortcut(app);
 
+        // Remember whether a preview (dedicated stream or chunked loop) was
+        // driving the Live panel BEFORE tearing it down, so the panel keeps
+        // its text through finalization instead of collapsing to the pill.
+        let ptm = Arc::clone(&app.state::<crate::PreviewTranscription>().0);
+        let preview_was_active = ptm.is_streaming() || chunked_preview_active();
         // Stop the chunked preview loop promptly so an in-flight pass is the
         // only thing the final transcription can wait on, and tear down the
-        // dual-model preview stream (its text is preview-only; the ghost
-        // switches to the spinner now anyway). Tolerant no-ops when inactive.
+        // dual-model preview stream (its text is preview-only).
         stop_chunked_preview();
-        app.state::<crate::PreviewTranscription>().0.cancel_stream();
+        ptm.cancel_stream();
 
         let stop_time = Instant::now();
         debug!("TranscribeAction::stop called for binding: {}", binding_id);
@@ -979,20 +989,12 @@ impl ShortcutAction for TranscribeAction {
         let stop_settings = get_settings(app);
         let style = stop_settings.overlay_style;
 
-        // Ghost preview: switch to the spinning-star state while
-        // transcription/post-processing runs. For non-streaming models this
-        // is the ghost's first appearance (at the caret); for streaming ones
-        // it replaces the live text in place. Background thread — the caret
-        // lookup can involve a UIA round-trip.
-        if stop_settings.inline_preview {
-            let ah_ghost = app.clone();
-            std::thread::spawn(move || {
-                crate::ghost::set_state(&ah_ghost, "processing");
-            });
-        }
         // Capture this before finalizing the stream so every later working state
-        // targets the same overlay that was shown for this transcription.
-        let use_streaming_overlay = should_use_streaming_overlay(style, tm.is_streaming());
+        // targets the same overlay that was shown for this transcription. A
+        // preview-driven panel (dual-model or chunked) counts as streaming for
+        // UI purposes: it holds its text under the working star.
+        let use_streaming_overlay =
+            should_use_streaming_overlay(style, tm.is_streaming() || preview_was_active);
         if use_streaming_overlay {
             tm.emit_stream_working(StreamWorkKind::Transcribing);
         } else {

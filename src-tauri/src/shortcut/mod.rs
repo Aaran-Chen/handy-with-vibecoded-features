@@ -1231,15 +1231,6 @@ pub fn update_context_tone_rules(
 
 #[tauri::command]
 #[specta::specta]
-pub fn change_inline_preview_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.inline_preview = enabled;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub fn change_preview_model_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.preview_model_enabled = enabled;

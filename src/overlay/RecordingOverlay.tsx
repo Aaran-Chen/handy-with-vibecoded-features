@@ -195,17 +195,37 @@ const RecordingOverlay: React.FC = () => {
     </div>
   );
 
-  // spinner (left) | label (center) | cancel (right) — same 3-zone grid as the
+  // star (left) | label (center) | cancel (right) — same 3-zone grid as the
   // listening row, so the label is centered.
   const workingRow = (label: string, showCancel: boolean) => (
     <div className="sbase">
       <div className="sbase-l">
-        <span className="sspinner" />
+        <span className="sstar" aria-hidden="true">
+          {"✦"}
+        </span>
       </div>
       <span className="swork-label">{label}</span>
       <div className="sbase-r">{showCancel && cancelBtn}</div>
     </div>
   );
+
+  // Long transcriptions keep their start and end with an ellipsis in the
+  // middle, so the panel stays compact and the newest words are always
+  // visible next to the waveform.
+  const MAX_PREVIEW_CHARS = 160;
+  const HEAD_CHARS = 48;
+  const fullPreview = streamText.committed + streamText.tentative;
+  const middleEllipsed = fullPreview.length > MAX_PREVIEW_CHARS;
+  let previewHead = "";
+  let previewCommittedTail = "";
+  let previewTentativeTail = "";
+  if (middleEllipsed) {
+    previewHead = fullPreview.slice(0, HEAD_CHARS);
+    const tail = fullPreview.slice(-(MAX_PREVIEW_CHARS - HEAD_CHARS));
+    const tentLen = Math.min(streamText.tentative.length, tail.length);
+    previewTentativeTail = tentLen > 0 ? tail.slice(tail.length - tentLen) : "";
+    previewCommittedTail = tail.slice(0, tail.length - tentLen);
+  }
 
   // ---- Live overlay: a pill that sculpts open into a panel ----
   if (state === "streaming") {
@@ -235,12 +255,25 @@ const RecordingOverlay: React.FC = () => {
                 onScroll={handleStreamScroll}
               >
                 <p>
-                  <span className="committed">
-                    {streamText.committed ? streamText.committed + " " : ""}
-                  </span>
-                  <span className="tentative">{streamText.tentative}</span>
+                  {middleEllipsed ? (
+                    <>
+                      <span className="committed">
+                        {previewHead}
+                        {" … "}
+                        {previewCommittedTail}
+                      </span>
+                      <span className="tentative">{previewTentativeTail}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="committed">
+                        {streamText.committed ? streamText.committed + " " : ""}
+                      </span>
+                      <span className="tentative">{streamText.tentative}</span>
+                    </>
+                  )}
                   {/* Drop the blinking caret once finalizing — it's no longer
-                      capturing, and a static spinner conveys the work. */}
+                      capturing, and a static star conveys the work. */}
                   {!working && <span className="scaret" />}
                 </p>
               </div>

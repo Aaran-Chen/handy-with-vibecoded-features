@@ -32,11 +32,10 @@ pub fn cancel_current_operation(app: &AppHandle) {
         ptm.0.cancel_stream();
     }
 
-    // Update tray icon and hide overlay + ghost preview
+    // Update tray icon and hide overlay
     change_tray_icon(app, crate::tray::TrayIconState::Idle);
     hide_recording_overlay(app);
     crate::actions::stop_chunked_preview();
-    crate::ghost::hide(app);
 
     // Unload model if immediate unload is enabled
     tm.maybe_unload_immediately("cancellation");

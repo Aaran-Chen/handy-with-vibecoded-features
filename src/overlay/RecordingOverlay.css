@@ -342,19 +342,26 @@
   transform: scale(0.95);
 }
 
-/* working state (transcribing / polishing) — spinner + label */
-.sspinner {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 2px solid var(--s-hair);
-  border-top-color: var(--s-accent);
-  animation: sspin 0.7s linear infinite;
+/* working state (transcribing / polishing) — spinning star + label */
+.sstar {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--s-accent);
+  display: inline-block;
+  transform-origin: 50% 54%;
+  animation: sstar-spin 1.5s ease-in-out infinite;
   flex: none;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--s-accent) 45%, transparent);
 }
-@keyframes sspin {
-  to {
-    transform: rotate(1turn);
+@keyframes sstar-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.2);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
   }
 }
 .swork-label {

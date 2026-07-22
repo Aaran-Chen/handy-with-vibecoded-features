@@ -1,5 +1,5 @@
-//! Captures the foreground application — and, for browsers, the active
-//! website — at dictation time so LLM post-processing can adapt tone to the
+﻿//! Captures the foreground application â€” and, for browsers, the active
+//! website â€” at dictation time so LLM post-processing can adapt tone to the
 //! destination (formal for email/docs, casual for chat, etc.).
 //!
 //! Capture is Windows-only for now; other platforms return no context and
@@ -302,7 +302,7 @@ fn capture() -> Option<AppContext> {
 /// The character immediately to the left of the caret in the focused
 /// control, read via UI Automation's text pattern. Used for smart paste
 /// spacing (dictating right after a sentence should insert a space first).
-/// Returns None when the focused control exposes no caret/text pattern —
+/// Returns None when the focused control exposes no caret/text pattern â€”
 /// callers must treat that as "unknown", not "no character".
 #[cfg(windows)]
 pub fn char_before_caret() -> Option<char> {
@@ -373,189 +373,6 @@ pub fn char_before_caret() -> Option<char> {
 
 #[cfg(not(windows))]
 pub fn char_before_caret() -> Option<char> {
-    None
-}
-
-/// Screen rectangle (physical px: x, y, w, h) of the text caret in the
-/// focused control. Tries the classic Win32 caret first (exact for native
-/// edit controls), then falls back to UI Automation's caret-range bounding
-/// rect (covers browsers and modern frameworks).
-#[cfg(windows)]
-pub fn caret_screen_rect() -> Option<(f64, f64, f64, f64)> {
-    if let Some(rect) = caret_rect_guithreadinfo() {
-        return Some(rect);
-    }
-    caret_rect_uia()
-}
-
-#[cfg(windows)]
-fn caret_rect_guithreadinfo() -> Option<(f64, f64, f64, f64)> {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::Graphics::Gdi::ClientToScreen;
-    use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GUITHREADINFO};
-
-    unsafe {
-        let mut info = GUITHREADINFO {
-            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
-            ..Default::default()
-        };
-        // Thread id 0 = the foreground thread.
-        GetGUIThreadInfo(0, &mut info).ok()?;
-        if info.hwndCaret.is_invalid() {
-            return None;
-        }
-        let rc = info.rcCaret;
-        if rc.bottom <= rc.top {
-            return None;
-        }
-        let mut top_left = POINT {
-            x: rc.left,
-            y: rc.top,
-        };
-        if !ClientToScreen(info.hwndCaret, &mut top_left).as_bool() {
-            return None;
-        }
-        Some((
-            top_left.x as f64,
-            top_left.y as f64,
-            (rc.right - rc.left).max(1) as f64,
-            (rc.bottom - rc.top) as f64,
-        ))
-    }
-}
-
-/// First bounding rect of a UIA text range, or None (with a debug log on
-/// failure). Returns (left, top, width, height) in physical px.
-#[cfg(windows)]
-unsafe fn first_range_rect(
-    automation: &windows::Win32::UI::Accessibility::IUIAutomation,
-    range: &windows::Win32::UI::Accessibility::IUIAutomationTextRange,
-) -> Option<(f64, f64, f64, f64)> {
-    let sa = match range.GetBoundingRectangles() {
-        Ok(sa) => sa,
-        Err(e) => {
-            log::debug!("caret: GetBoundingRectangles failed: {e}");
-            return None;
-        }
-    };
-    let mut rect_ptr: *mut windows::Win32::Foundation::RECT = std::ptr::null_mut();
-    let count = automation
-        .SafeArrayToRectNativeArray(sa, &mut rect_ptr)
-        .unwrap_or(0);
-    let _ = windows::Win32::System::Ole::SafeArrayDestroy(sa);
-    if count > 0 && !rect_ptr.is_null() {
-        let r = *rect_ptr;
-        windows::Win32::System::Com::CoTaskMemFree(Some(rect_ptr as *const core::ffi::c_void));
-        if r.bottom > r.top {
-            return Some((
-                r.left as f64,
-                r.top as f64,
-                (r.right - r.left).max(1) as f64,
-                (r.bottom - r.top) as f64,
-            ));
-        }
-    }
-    None
-}
-
-#[cfg(windows)]
-fn caret_rect_uia() -> Option<(f64, f64, f64, f64)> {
-    use windows::core::BOOL;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
-    };
-    use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation, IUIAutomationTextPattern2, TextPatternRangeEndpoint_Start,
-        TextUnit_Character, UIA_TextPattern2Id,
-    };
-
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let automation: IUIAutomation =
-            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
-        let focused = match automation.GetFocusedElement() {
-            Ok(f) => f,
-            Err(e) => {
-                log::debug!("caret: no focused element: {e}");
-                return None;
-            }
-        };
-        // Tier 1: TextPattern2's true caret range.
-        let caret_range =
-            match focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id) {
-                Ok(tp2) => {
-                    let mut is_active = BOOL::default();
-                    tp2.GetCaretRange(&mut is_active).ok()
-                }
-                Err(e) => {
-                    log::debug!("caret: no TextPattern2 ({e}); trying TextPattern");
-                    None
-                }
-            };
-
-        // Tier 2: TextPattern (v1) selection — its start coincides with the
-        // caret when nothing is selected. Some apps expose only this.
-        let caret_range = caret_range.or_else(|| {
-            use windows::Win32::UI::Accessibility::{IUIAutomationTextPattern, UIA_TextPatternId};
-            let tp = focused
-                .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
-                .ok()?;
-            let ranges = tp.GetSelection().ok()?;
-            if ranges.Length().ok()? == 0 {
-                return None;
-            }
-            ranges.GetElement(0).ok()
-        });
-
-        if let Some(range) = caret_range {
-            // Preferred: measure the character just LEFT of the caret — the
-            // same maneuver char_before_caret uses. The caret sits at that
-            // character's right edge.
-            if let Ok(prev) = range.Clone() {
-                let moved = prev
-                    .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -1)
-                    .unwrap_or(0);
-                if moved != 0 {
-                    if let Some((left, top, width, height)) = first_range_rect(&automation, &prev) {
-                        return Some((left + width, top, 2.0, height));
-                    }
-                }
-            }
-            // Next: expand the caret range itself to the enclosing character
-            // (covers caret-at-start-of-text, where there is no previous char).
-            if let Ok(expanded) = range.Clone() {
-                let _ = expanded.ExpandToEnclosingUnit(TextUnit_Character);
-                if let Some((left, top, _width, height)) = first_range_rect(&automation, &expanded)
-                {
-                    return Some((left, top, 2.0, height));
-                }
-            }
-        }
-
-        // Tier 3: no usable text pattern — anchor to the focused element's
-        // own rect (bottom-left, one line up) so the preview still appears
-        // by the field instead of not at all.
-        match focused.CurrentBoundingRectangle() {
-            Ok(el_rect) => {
-                let height = ((el_rect.bottom - el_rect.top) as f64).clamp(14.0, 28.0);
-                let line_h = height.min(24.0);
-                Some((
-                    el_rect.left as f64 + 8.0,
-                    (el_rect.bottom as f64 - line_h - 6.0).max(el_rect.top as f64 + 4.0),
-                    2.0,
-                    line_h,
-                ))
-            }
-            Err(e) => {
-                log::debug!("caret: element bounding rect failed: {e}");
-                None
-            }
-        }
-    }
-}
-
-#[cfg(not(windows))]
-pub fn caret_screen_rect() -> Option<(f64, f64, f64, f64)> {
     None
 }
 
