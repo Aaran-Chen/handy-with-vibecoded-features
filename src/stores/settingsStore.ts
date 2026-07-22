@@ -161,6 +161,8 @@ const settingUpdaters: {
   context_tone_rules: (value) =>
     commands.updateContextToneRules(value as ToneRule[]),
   tone_presets: (value) => commands.updateTonePresets(value as TonePreset[]),
+  inline_preview: (value) =>
+    commands.changeInlinePreviewSetting(value as boolean),
   show_tray_icon: (value) =>
     commands.changeShowTrayIconSetting(value as boolean),
   transcribe_accelerator: (value) =>

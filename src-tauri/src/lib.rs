@@ -8,6 +8,7 @@ mod catalog;
 pub mod cli;
 mod clipboard;
 mod commands;
+mod ghost;
 mod helpers;
 mod input;
 mod llm_client;
@@ -310,6 +311,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Create the recording overlay window (hidden by default)
     utils::create_recording_overlay(app_handle);
+
+    // Create the caret-anchored ghost preview window (hidden by default)
+    ghost::create_ghost_window(app_handle);
 }
 
 #[tauri::command]
@@ -585,6 +589,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_context_aware_enabled_setting,
             shortcut::update_context_tone_rules,
             shortcut::update_tone_presets,
+            shortcut::change_inline_preview_setting,
             shortcut::change_app_language_setting,
             shortcut::change_update_checks_setting,
             shortcut::change_show_whats_new_on_update_setting,

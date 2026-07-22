@@ -34,9 +34,12 @@ struct RecordingErrorEvent {
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
+/// Also tears down the caret ghost preview, so it disappears on every exit
+/// path (paste, cancel, error) without per-path bookkeeping.
 struct FinishGuard(AppHandle);
 impl Drop for FinishGuard {
     fn drop(&mut self) {
+        crate::ghost::hide(&self.0);
         if let Some(c) = self.0.try_state::<TranscriptionCoordinator>() {
             c.notify_processing_finished();
         }
@@ -699,6 +702,17 @@ impl ShortcutAction for TranscribeAction {
         if model_supports_streaming {
             tm.start_stream();
         }
+
+        // Caret ghost preview: live half-opacity transcription at the text
+        // cursor. Only meaningful while streaming (there is no partial text
+        // otherwise); positioned on a background thread — the caret lookup
+        // can involve a UIA round-trip.
+        if settings.inline_preview && model_supports_streaming {
+            let ah_ghost = app.clone();
+            std::thread::spawn(move || {
+                crate::ghost::show_at_caret(&ah_ghost, "listening");
+            });
+        }
         let plan_elapsed = plan_started.elapsed();
 
         // Sizing the overlay follows the same advertised capability. A model that
@@ -771,6 +785,7 @@ impl ShortcutAction for TranscribeAction {
         } else {
             // Starting failed (for example due to blocked microphone permissions).
             // Revert UI state so we don't stay stuck in the recording overlay.
+            crate::ghost::hide(app);
             tm.cancel_stream();
             utils::hide_recording_overlay(app);
             change_tray_icon(app, TrayIconState::Idle);
@@ -822,7 +837,20 @@ impl ShortcutAction for TranscribeAction {
         // the larger panel, but it still switches from listening to a working
         // spinner while the stream finalizes. Non-streaming paths use the
         // compact transcribing pill (None no-ops in show_*).
-        let style = get_settings(app).overlay_style;
+        let stop_settings = get_settings(app);
+        let style = stop_settings.overlay_style;
+
+        // Ghost preview: switch to the spinning-star state while
+        // transcription/post-processing runs. For non-streaming models this
+        // is the ghost's first appearance (at the caret); for streaming ones
+        // it replaces the live text in place. Background thread — the caret
+        // lookup can involve a UIA round-trip.
+        if stop_settings.inline_preview {
+            let ah_ghost = app.clone();
+            std::thread::spawn(move || {
+                crate::ghost::set_state(&ah_ghost, "processing");
+            });
+        }
         // Capture this before finalizing the stream so every later working state
         // targets the same overlay that was shown for this transcription.
         let use_streaming_overlay = should_use_streaming_overlay(style, tm.is_streaming());

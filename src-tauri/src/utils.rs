@@ -29,9 +29,10 @@ pub fn cancel_current_operation(app: &AppHandle) {
     let tm = app.state::<Arc<TranscriptionManager>>();
     tm.cancel_stream();
 
-    // Update tray icon and hide overlay
+    // Update tray icon and hide overlay + ghost preview
     change_tray_icon(app, crate::tray::TrayIconState::Idle);
     hide_recording_overlay(app);
+    crate::ghost::hide(app);
 
     // Unload model if immediate unload is enabled
     tm.maybe_unload_immediately("cancellation");

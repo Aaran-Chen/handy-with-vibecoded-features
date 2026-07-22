@@ -376,6 +376,112 @@ pub fn char_before_caret() -> Option<char> {
     None
 }
 
+/// Screen rectangle (physical px: x, y, w, h) of the text caret in the
+/// focused control. Tries the classic Win32 caret first (exact for native
+/// edit controls), then falls back to UI Automation's caret-range bounding
+/// rect (covers browsers and modern frameworks).
+#[cfg(windows)]
+pub fn caret_screen_rect() -> Option<(f64, f64, f64, f64)> {
+    if let Some(rect) = caret_rect_guithreadinfo() {
+        return Some(rect);
+    }
+    caret_rect_uia()
+}
+
+#[cfg(windows)]
+fn caret_rect_guithreadinfo() -> Option<(f64, f64, f64, f64)> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::ClientToScreen;
+    use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GUITHREADINFO};
+
+    unsafe {
+        let mut info = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        // Thread id 0 = the foreground thread.
+        GetGUIThreadInfo(0, &mut info).ok()?;
+        if info.hwndCaret.is_invalid() {
+            return None;
+        }
+        let rc = info.rcCaret;
+        if rc.bottom <= rc.top {
+            return None;
+        }
+        let mut top_left = POINT {
+            x: rc.left,
+            y: rc.top,
+        };
+        if !ClientToScreen(info.hwndCaret, &mut top_left).as_bool() {
+            return None;
+        }
+        Some((
+            top_left.x as f64,
+            top_left.y as f64,
+            (rc.right - rc.left).max(1) as f64,
+            (rc.bottom - rc.top) as f64,
+        ))
+    }
+}
+
+#[cfg(windows)]
+fn caret_rect_uia() -> Option<(f64, f64, f64, f64)> {
+    use windows::core::BOOL;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern2, TextUnit_Character,
+        UIA_TextPattern2Id,
+    };
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let automation: IUIAutomation =
+            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+        let focused = automation.GetFocusedElement().ok()?;
+        let tp2 = focused
+            .GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+            .ok()?;
+        let mut is_active = BOOL::default();
+        let range = tp2.GetCaretRange(&mut is_active).ok()?;
+        // The caret range is degenerate (zero-width); expand to the enclosing
+        // character so it has a bounding rect. At end-of-text this can still
+        // be empty — then fall back to the focused element's own rect height.
+        let _ = range.ExpandToEnclosingUnit(TextUnit_Character);
+        let sa = range.GetBoundingRectangles().ok()?;
+        let mut rect_ptr: *mut windows::Win32::Foundation::RECT = std::ptr::null_mut();
+        let count = automation
+            .SafeArrayToRectNativeArray(sa, &mut rect_ptr)
+            .unwrap_or(0);
+        let _ = windows::Win32::System::Ole::SafeArrayDestroy(sa);
+        if count > 0 && !rect_ptr.is_null() {
+            let r = *rect_ptr;
+            windows::Win32::System::Com::CoTaskMemFree(Some(rect_ptr as *const core::ffi::c_void));
+            return Some((
+                r.left as f64,
+                r.top as f64,
+                (r.right - r.left).max(1) as f64,
+                (r.bottom - r.top).max(1) as f64,
+            ));
+        }
+        // Empty character rect (caret at end of an empty line): approximate
+        // with the focused element's rect — left edge, typical line height.
+        let el_rect = focused.CurrentBoundingRectangle().ok()?;
+        Some((
+            el_rect.left as f64 + 4.0,
+            el_rect.top as f64 + 4.0,
+            2.0,
+            ((el_rect.bottom - el_rect.top) as f64 - 8.0).clamp(14.0, 28.0),
+        ))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn caret_screen_rect() -> Option<(f64, f64, f64, f64)> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

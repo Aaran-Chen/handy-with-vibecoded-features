@@ -457,6 +457,10 @@ pub struct AppSettings {
     pub context_tone_rules: Vec<ToneRule>,
     #[serde(default = "default_tone_presets")]
     pub tone_presets: Vec<TonePreset>,
+    // Caret-anchored ghost preview: live half-opacity transcription preview
+    // at the text cursor while dictating, spinner while post-processing.
+    #[serde(default = "default_inline_preview")]
+    pub inline_preview: bool,
     #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
@@ -760,6 +764,10 @@ fn default_context_aware_enabled() -> bool {
     true
 }
 
+fn default_inline_preview() -> bool {
+    true
+}
+
 /// Ordered as shown in the tone dropdown: casual first, formal and technical
 /// as the other anchors, with intermediate tones between them.
 pub fn default_tone_presets() -> Vec<TonePreset> {
@@ -998,6 +1006,7 @@ pub fn get_default_settings() -> AppSettings {
         context_aware_enabled: default_context_aware_enabled(),
         context_tone_rules: default_context_tone_rules(),
         tone_presets: default_tone_presets(),
+        inline_preview: default_inline_preview(),
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),
