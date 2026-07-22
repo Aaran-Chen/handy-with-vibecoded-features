@@ -424,6 +424,40 @@ fn caret_rect_guithreadinfo() -> Option<(f64, f64, f64, f64)> {
     }
 }
 
+/// First bounding rect of a UIA text range, or None (with a debug log on
+/// failure). Returns (left, top, width, height) in physical px.
+#[cfg(windows)]
+unsafe fn first_range_rect(
+    automation: &windows::Win32::UI::Accessibility::IUIAutomation,
+    range: &windows::Win32::UI::Accessibility::IUIAutomationTextRange,
+) -> Option<(f64, f64, f64, f64)> {
+    let sa = match range.GetBoundingRectangles() {
+        Ok(sa) => sa,
+        Err(e) => {
+            log::debug!("caret: GetBoundingRectangles failed: {e}");
+            return None;
+        }
+    };
+    let mut rect_ptr: *mut windows::Win32::Foundation::RECT = std::ptr::null_mut();
+    let count = automation
+        .SafeArrayToRectNativeArray(sa, &mut rect_ptr)
+        .unwrap_or(0);
+    let _ = windows::Win32::System::Ole::SafeArrayDestroy(sa);
+    if count > 0 && !rect_ptr.is_null() {
+        let r = *rect_ptr;
+        windows::Win32::System::Com::CoTaskMemFree(Some(rect_ptr as *const core::ffi::c_void));
+        if r.bottom > r.top {
+            return Some((
+                r.left as f64,
+                r.top as f64,
+                (r.right - r.left).max(1) as f64,
+                (r.bottom - r.top) as f64,
+            ));
+        }
+    }
+    None
+}
+
 #[cfg(windows)]
 fn caret_rect_uia() -> Option<(f64, f64, f64, f64)> {
     use windows::core::BOOL;
@@ -431,49 +465,77 @@ fn caret_rect_uia() -> Option<(f64, f64, f64, f64)> {
         CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
     };
     use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation, IUIAutomationTextPattern2, TextUnit_Character,
-        UIA_TextPattern2Id,
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern2, TextPatternRangeEndpoint_Start,
+        TextUnit_Character, UIA_TextPattern2Id,
     };
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let automation: IUIAutomation =
             CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
-        let focused = automation.GetFocusedElement().ok()?;
-        let tp2 = focused
-            .GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
-            .ok()?;
+        let focused = match automation.GetFocusedElement() {
+            Ok(f) => f,
+            Err(e) => {
+                log::debug!("caret: no focused element: {e}");
+                return None;
+            }
+        };
+        let tp2 = match focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+        {
+            Ok(tp) => tp,
+            Err(e) => {
+                log::debug!("caret: focused element has no TextPattern2: {e}");
+                return None;
+            }
+        };
         let mut is_active = BOOL::default();
-        let range = tp2.GetCaretRange(&mut is_active).ok()?;
-        // The caret range is degenerate (zero-width); expand to the enclosing
-        // character so it has a bounding rect. At end-of-text this can still
-        // be empty — then fall back to the focused element's own rect height.
-        let _ = range.ExpandToEnclosingUnit(TextUnit_Character);
-        let sa = range.GetBoundingRectangles().ok()?;
-        let mut rect_ptr: *mut windows::Win32::Foundation::RECT = std::ptr::null_mut();
-        let count = automation
-            .SafeArrayToRectNativeArray(sa, &mut rect_ptr)
-            .unwrap_or(0);
-        let _ = windows::Win32::System::Ole::SafeArrayDestroy(sa);
-        if count > 0 && !rect_ptr.is_null() {
-            let r = *rect_ptr;
-            windows::Win32::System::Com::CoTaskMemFree(Some(rect_ptr as *const core::ffi::c_void));
-            return Some((
-                r.left as f64,
-                r.top as f64,
-                (r.right - r.left).max(1) as f64,
-                (r.bottom - r.top).max(1) as f64,
-            ));
+        let range = match tp2.GetCaretRange(&mut is_active) {
+            Ok(r) => r,
+            Err(e) => {
+                log::debug!("caret: GetCaretRange failed: {e}");
+                return None;
+            }
+        };
+
+        // Preferred: measure the character just LEFT of the caret — the same
+        // maneuver char_before_caret uses (empirically supported where
+        // ExpandToEnclosingUnit on a collapsed caret is not). The caret sits
+        // at that character's right edge.
+        if let Ok(prev) = range.Clone() {
+            let moved = prev
+                .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, -1)
+                .unwrap_or(0);
+            if moved != 0 {
+                if let Some((left, top, width, height)) = first_range_rect(&automation, &prev) {
+                    return Some((left + width, top, 2.0, height));
+                }
+            }
         }
-        // Empty character rect (caret at end of an empty line): approximate
-        // with the focused element's rect — left edge, typical line height.
-        let el_rect = focused.CurrentBoundingRectangle().ok()?;
-        Some((
-            el_rect.left as f64 + 4.0,
-            el_rect.top as f64 + 4.0,
-            2.0,
-            ((el_rect.bottom - el_rect.top) as f64 - 8.0).clamp(14.0, 28.0),
-        ))
+
+        // Next: expand the caret range itself to the enclosing character
+        // (covers caret-at-start-of-text, where there is no previous char).
+        if let Ok(expanded) = range.Clone() {
+            let _ = expanded.ExpandToEnclosingUnit(TextUnit_Character);
+            if let Some((left, top, _width, height)) = first_range_rect(&automation, &expanded) {
+                return Some((left, top, 2.0, height));
+            }
+        }
+
+        // Last resort: the focused element's own rect — left edge, a typical
+        // line height. Keeps the spinner near the field even when the exact
+        // caret cannot be measured (e.g. empty field in some frameworks).
+        match focused.CurrentBoundingRectangle() {
+            Ok(el_rect) => Some((
+                el_rect.left as f64 + 6.0,
+                el_rect.top as f64 + 6.0,
+                2.0,
+                ((el_rect.bottom - el_rect.top) as f64 - 12.0).clamp(14.0, 28.0),
+            )),
+            Err(e) => {
+                log::debug!("caret: element bounding rect failed: {e}");
+                None
+            }
+        }
     }
 }
 
