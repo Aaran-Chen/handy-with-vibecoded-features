@@ -106,8 +106,18 @@
    bottom overlay's top fade. Gated on `.overflowing` so a short resting line
    (sitting at the very top) is never dimmed. */
 .ov-stage.top .stext-cap.overflowing {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) 22px,
+    #000 46px
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) 22px,
+    #000 46px
+  );
 }
 .ov-stage.top .stext-cap p {
   /* Top-anchor short text just under the pill; on overflow the cap still pins to
@@ -190,6 +200,16 @@
 .stext-clip {
   overflow: hidden;
   min-height: 0;
+  /* Dial/wheel warp: the newest line at the bottom sits flat in-plane while
+     older lines lean away and shrink as they ride up, like text printed on
+     the face of a rolling wheel. The deep top fade below completes the
+     "rolling over the edge" dissolve. */
+  perspective: 210px;
+  perspective-origin: 50% 100%;
+}
+.stext-cap {
+  transform: rotateX(18deg);
+  transform-origin: 50% 100%;
 }
 .stext-cap {
   max-height: var(--ov-cap-max-h);
@@ -210,6 +230,23 @@
   mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* legacy Edge */
+}
+/* Deep, eased fade once text overflows: lines dissolve gradually as they
+   roll over the top of the wheel instead of clipping at a hard edge. Gated
+   on `.overflowing` so a short resting line is never dimmed. */
+.stext-cap.overflowing {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) 22px,
+    #000 46px
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) 22px,
+    #000 46px
+  );
 }
 /* Hide the scrollbar (WebKit/Chromium) — scroll-back is signalled by the fade. */
 .stext-cap::-webkit-scrollbar {
