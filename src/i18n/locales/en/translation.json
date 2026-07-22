@@ -577,6 +577,10 @@
         "label": "Append Trailing Space",
         "description": "Add a space after pasted transcription"
       },
+      "clipboardFallback": {
+        "label": "Keep Transcript on Clipboard",
+        "description": "If no text box has focus when pasting, leave the transcription on the clipboard so you can paste it manually"
+      },
       "keyboardImplementation": {
         "title": "Keyboard Implementation",
         "description": "Choose the keyboard shortcut backend.",

@@ -466,6 +466,11 @@ pub struct AppSettings {
     pub mute_while_recording: bool,
     #[serde(default)]
     pub append_trailing_space: bool,
+    /// When the focused element can't take text input, leave the transcript on
+    /// the system clipboard (skip the usual clipboard restore) so a manual
+    /// Ctrl+V still lands it.
+    #[serde(default = "default_clipboard_fallback")]
+    pub clipboard_fallback: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
     #[serde(default = "default_theme")]
@@ -765,6 +770,10 @@ fn default_context_aware_enabled() -> bool {
     true
 }
 
+fn default_clipboard_fallback() -> bool {
+    true
+}
+
 /// Ordered as shown in the tone dropdown: casual first, formal and technical
 /// as the other anchors, with intermediate tones between them.
 pub fn default_tone_presets() -> Vec<TonePreset> {
@@ -1006,6 +1015,7 @@ pub fn get_default_settings() -> AppSettings {
         preview_model_enabled: false,
         mute_while_recording: false,
         append_trailing_space: false,
+        clipboard_fallback: default_clipboard_fallback(),
         app_language: default_app_language(),
         theme: default_theme(),
         experimental_enabled: false,

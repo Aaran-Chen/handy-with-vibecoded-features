@@ -20,6 +20,7 @@ fn paste_via_clipboard(
     paste_method: &PasteMethod,
     paste_delay_ms: u64,
     paste_delay_after_ms: u64,
+    restore_clipboard: bool,
 ) -> Result<(), String> {
     let clipboard = app_handle.clipboard();
     let clipboard_content = clipboard.read_text().unwrap_or_default();
@@ -64,7 +65,14 @@ fn paste_via_clipboard(
 
     std::thread::sleep(Duration::from_millis(paste_delay_after_ms));
 
-    // Restore original clipboard content
+    // Restore original clipboard content — unless the caller determined the
+    // paste had no editable target, in which case the transcript stays on the
+    // clipboard so a manual Ctrl+V can still land it.
+    if !restore_clipboard {
+        info!("Clipboard fallback: leaving transcript on the clipboard");
+        return Ok(());
+    }
+
     // On Wayland, prefer wl-copy for better compatibility
     #[cfg(target_os = "linux")]
     if is_wayland() && is_wl_copy_available() {
@@ -606,6 +614,17 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     let paste_delay_ms = settings.paste_delay_ms;
     let paste_delay_after_ms = settings.paste_delay_after_ms;
 
+    // Clipboard fallback: when nothing editable has focus, the synthetic
+    // paste keystroke lands nowhere and the transcript would vanish with the
+    // clipboard restore. Probe while the target still has focus (before any
+    // clipboard writes or key synthesis). Unknown (None) is treated as
+    // editable so UIA hiccups never change stock behavior.
+    let no_editable_target = settings.clipboard_fallback
+        && crate::app_context::focused_element_is_editable() == Some(false);
+    if no_editable_target {
+        info!("Clipboard fallback: focused element is not editable; transcript will stay on the clipboard");
+    }
+
     // Smart spacing: when the caret sits directly right of sentence
     // punctuation ("...done.|"), insert a space first so consecutive
     // dictations read "done. Next" instead of "done.Next". Caret inspection
@@ -651,6 +670,11 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
                 #[cfg(target_os = "linux")]
                 settings.typing_tool,
             )?;
+            // Direct typing into a non-editable target also lands nowhere;
+            // leave the transcript on the clipboard as the recovery path.
+            if no_editable_target {
+                let _ = app_handle.clipboard().write_text(&text);
+            }
         }
         PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
             paste_via_clipboard(
@@ -660,6 +684,7 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
                 &paste_method,
                 paste_delay_ms,
                 paste_delay_after_ms,
+                !no_editable_target,
             )?
         }
         PasteMethod::ExternalScript => {

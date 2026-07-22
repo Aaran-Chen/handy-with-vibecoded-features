@@ -401,6 +401,74 @@ pub fn char_before_caret() -> Option<char> {
     None
 }
 
+/// Whether the focused UI element accepts text input. `None` when UIA can't
+/// answer — callers should treat that as "editable" so behavior degrades to
+/// stock Handy. Signals, in order of confidence: an Edit control type, a
+/// writable ValuePattern, or an active insertion caret (TextPattern2). A
+/// focused element with none of these — a web page body, a game, the
+/// desktop — is where a synthetic paste lands nowhere.
+#[cfg(windows)]
+pub fn focused_element_is_editable() -> Option<bool> {
+    use windows::core::BOOL;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern2, IUIAutomationValuePattern,
+        UIA_EditControlTypeId, UIA_TextPattern2Id, UIA_ValuePatternId,
+    };
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let automation: IUIAutomation =
+            match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+                Ok(a) => a,
+                Err(e) => {
+                    log::debug!("focused_element_is_editable: UIA instance failed: {e}");
+                    return None;
+                }
+            };
+        let focused = match automation.GetFocusedElement() {
+            Ok(f) => f,
+            Err(e) => {
+                log::debug!("focused_element_is_editable: no focused element: {e}");
+                return None;
+            }
+        };
+
+        if let Ok(control_type) = focused.CurrentControlType() {
+            if control_type == UIA_EditControlTypeId {
+                return Some(true);
+            }
+        }
+
+        if let Ok(vp) = focused.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+        {
+            if let Ok(read_only) = vp.CurrentIsReadOnly() {
+                if !read_only.as_bool() {
+                    return Some(true);
+                }
+            }
+        }
+
+        if let Ok(tp2) =
+            focused.GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
+        {
+            let mut caret_active = BOOL::default();
+            if tp2.GetCaretRange(&mut caret_active).is_ok() {
+                return Some(caret_active.as_bool());
+            }
+        }
+
+        Some(false)
+    }
+}
+
+#[cfg(not(windows))]
+pub fn focused_element_is_editable() -> Option<bool> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

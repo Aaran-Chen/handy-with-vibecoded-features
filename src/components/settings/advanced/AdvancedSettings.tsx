@@ -10,6 +10,7 @@ import { ShowTrayIcon } from "../ShowTrayIcon";
 import { PasteMethodSetting } from "../PasteMethod";
 import { TypingToolSetting } from "../TypingTool";
 import { ClipboardHandlingSetting } from "../ClipboardHandling";
+import { ClipboardFallback } from "../ClipboardFallback";
 import { AutoSubmit } from "../AutoSubmit";
 import { PostProcessingToggle } from "../PostProcessingToggle";
 import { AppendTrailingSpace } from "../AppendTrailingSpace";
@@ -44,6 +45,7 @@ export const AdvancedSettings: React.FC = () => {
         <PasteMethodSetting descriptionMode="tooltip" grouped={true} />
         <TypingToolSetting descriptionMode="tooltip" grouped={true} />
         <ClipboardHandlingSetting descriptionMode="tooltip" grouped={true} />
+        <ClipboardFallback descriptionMode="tooltip" grouped={true} />
         <AutoSubmit descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
 
