@@ -578,6 +578,8 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_post_process_enabled_setting,
             shortcut::change_always_post_process_setting,
             shortcut::change_clipboard_fallback_setting,
+            shortcut::change_collapse_animation_enabled_setting,
+            shortcut::change_collapse_animation_speed_setting,
             commands::post_process_models::get_system_capability,
             commands::post_process_models::get_post_process_model_catalog,
             commands::post_process_models::pull_post_process_model,

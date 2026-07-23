@@ -471,6 +471,16 @@ pub struct AppSettings {
     /// Ctrl+V still lands it.
     #[serde(default = "default_clipboard_fallback")]
     pub clipboard_fallback: bool,
+    /// Play the stop-collapse animation (preview text pours into the star)
+    /// and keep the overlay up while transcription/cleanup runs. When off,
+    /// the whole bar disappears at stop and the text simply pastes when
+    /// post-processing finishes.
+    #[serde(default = "default_collapse_animation_enabled")]
+    pub collapse_animation_enabled: bool,
+    /// Speed multiplier for the stop-collapse animation. 1.0 is the shipped
+    /// pace (slider midpoint); higher is faster.
+    #[serde(default = "default_collapse_animation_speed")]
+    pub collapse_animation_speed: f64,
     #[serde(default = "default_app_language")]
     pub app_language: String,
     #[serde(default = "default_theme")]
@@ -774,6 +784,14 @@ fn default_clipboard_fallback() -> bool {
     true
 }
 
+fn default_collapse_animation_enabled() -> bool {
+    true
+}
+
+fn default_collapse_animation_speed() -> f64 {
+    1.0
+}
+
 /// Ordered as shown in the tone dropdown: casual first, formal and technical
 /// as the other anchors, with intermediate tones between them.
 pub fn default_tone_presets() -> Vec<TonePreset> {
@@ -1016,6 +1034,8 @@ pub fn get_default_settings() -> AppSettings {
         mute_while_recording: false,
         append_trailing_space: false,
         clipboard_fallback: default_clipboard_fallback(),
+        collapse_animation_enabled: default_collapse_animation_enabled(),
+        collapse_animation_speed: default_collapse_animation_speed(),
         app_language: default_app_language(),
         theme: default_theme(),
         experimental_enabled: false,

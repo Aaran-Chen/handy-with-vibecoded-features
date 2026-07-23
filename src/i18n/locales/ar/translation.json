@@ -546,6 +546,14 @@
       "clipboardFallback": {
         "label": "Keep Transcript on Clipboard",
         "description": "If no text box has focus when pasting, leave the transcription on the clipboard so you can paste it manually"
+      },
+      "collapseAnimation": {
+        "label": "Stop-Collapse Animation",
+        "description": "Animate the live preview collapsing into the spinning star when recording stops. When off, the overlay disappears immediately and the text pastes once processing finishes"
+      },
+      "collapseAnimationSpeed": {
+        "label": "Animation Speed",
+        "description": "How fast the stop-collapse animation plays. 1.00x is the default pace"
       }
     },
     "about": {

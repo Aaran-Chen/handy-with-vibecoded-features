@@ -60,6 +60,9 @@ const RecordingOverlay: React.FC = () => {
   // `absorbed` marks the text as merged (panel may collapse to the pill);
   // `starPulse` drives the star's swell as the text lands in it.
   const [absorbed, setAbsorbed] = useState(false);
+  // Stop-collapse animation settings, refreshed on each overlay show. Speed
+  // is a multiplier around the shipped pace (1.0 = slider midpoint).
+  const [animSpeed, setAnimSpeed] = useState(1);
   // True while the fly-into-the-star animation is playing: the panel starts
   // shrinking immediately (absorbed) but the text must stay visible in
   // flight, so this suppresses the region's opacity fade until landing.
@@ -87,6 +90,12 @@ const RecordingOverlay: React.FC = () => {
           if (settings.status === "ok") {
             setPosition(
               settings.data.overlay_position === "top" ? "top" : "bottom",
+            );
+            const speed = settings.data.collapse_animation_speed;
+            setAnimSpeed(
+              typeof speed === "number" && speed > 0
+                ? Math.min(3, Math.max(0.25, speed))
+                : 1,
             );
           }
         } catch {
@@ -266,14 +275,20 @@ const RecordingOverlay: React.FC = () => {
     const starRect = star.getBoundingClientRect();
     const targetX = starRect.left + starRect.width / 2;
     const targetY = starRect.top + starRect.height / 2;
+    // Base durations are the shipped pace; the settings slider scales them
+    // (speed 1.0 = these values, 2.0 = twice as fast).
+    const fly = Math.round(1120 / animSpeed);
+    const stagger = Math.round(132 / animSpeed);
+    const fade = Math.round(910 / animSpeed);
+    const fadeLag = Math.round(240 / animSpeed);
     lineRefs.current.forEach((el, i) => {
       if (!el) return;
       const r = el.getBoundingClientRect();
       const dx = targetX - (r.left + r.width / 2);
       const dy = targetY - (r.top + r.height / 2);
       el.style.transition =
-        `transform 560ms cubic-bezier(0.6, -0.15, 0.9, 0.45) ${i * 66}ms, ` +
-        `opacity 455ms ease-in ${i * 66 + 120}ms`;
+        `transform ${fly}ms cubic-bezier(0.6, -0.15, 0.9, 0.45) ${i * stagger}ms, ` +
+        `opacity ${fade}ms ease-in ${i * stagger + fadeLag}ms`;
       el.style.transform = `perspective(300px) translate(${dx}px, ${dy}px) rotateX(40deg) scale(0.04)`;
       el.style.opacity = "0";
     });
@@ -282,14 +297,17 @@ const RecordingOverlay: React.FC = () => {
     // lines stay visible as the box collapses around them.
     setAbsorbed(true);
     setClosing(true);
-    const total = Math.min(560 + lineRefs.current.length * 66 + 160, 1270);
+    const total = Math.min(
+      fly + lineRefs.current.length * stagger + fadeLag + 80,
+      Math.round(2540 / animSpeed),
+    );
     const timer = setTimeout(() => {
       setClosing(false);
       setStarPulse(true);
-      setTimeout(() => setStarPulse(false), 535);
+      setTimeout(() => setStarPulse(false), Math.round(1070 / animSpeed));
     }, total);
     return () => clearTimeout(timer);
-  }, [workingNow, lines.length, editing]);
+  }, [workingNow, lines.length, editing, animSpeed]);
 
   // Re-pin when the user is within ~a line of the bottom; unpin otherwise.
   // Scrolling also re-solves the drum so lines rotate through the wheel live.
@@ -416,6 +434,12 @@ const RecordingOverlay: React.FC = () => {
           className={`scard ${open ? "open" : ""} ${collapsed ? "working" : ""} ${
             closing ? "closing" : ""
           } ${isVisible ? "" : "leaving"}`}
+          style={
+            {
+              "--cbox-dur": `${Math.round(1180 / animSpeed)}ms`,
+              "--cpulse-dur": `${Math.round(1010 / animSpeed)}ms`,
+            } as React.CSSProperties
+          }
         >
           <div className="stext">
             <div className="stext-clip">

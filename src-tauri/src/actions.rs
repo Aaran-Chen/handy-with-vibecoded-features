@@ -1059,7 +1059,13 @@ impl ShortcutAction for TranscribeAction {
         // UI purposes: it holds its text under the working star.
         let use_streaming_overlay =
             should_use_streaming_overlay(style, tm.is_streaming() || preview_was_active);
-        if use_streaming_overlay {
+        // With the stop-collapse animation disabled, the whole bar disappears
+        // the moment recording ends — no working pill, no star — and the text
+        // simply pastes when transcription/cleanup completes.
+        let overlay_during_work = stop_settings.collapse_animation_enabled;
+        if !overlay_during_work {
+            utils::hide_recording_overlay(app);
+        } else if use_streaming_overlay {
             tm.emit_stream_working(StreamWorkKind::Transcribing);
         } else {
             show_transcribing_overlay(app);
@@ -1171,7 +1177,7 @@ impl ShortcutAction for TranscribeAction {
                                 transcription
                             );
 
-                            if post_process {
+                            if post_process && overlay_during_work {
                                 if use_streaming_overlay {
                                     tm.emit_stream_working(StreamWorkKind::Polishing);
                                 } else {

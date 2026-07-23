@@ -149,6 +149,10 @@ const settingUpdaters: {
     commands.changeAppendTrailingSpaceSetting(value as boolean),
   clipboard_fallback: (value) =>
     commands.changeClipboardFallbackSetting(value as boolean),
+  collapse_animation_enabled: (value) =>
+    commands.changeCollapseAnimationEnabledSetting(value as boolean),
+  collapse_animation_speed: (value) =>
+    commands.changeCollapseAnimationSpeedSetting(value as number),
   log_level: (value) => commands.setLogLevel(value as any),
   app_language: (value) => commands.changeAppLanguageSetting(value as string),
   theme: (value) => commands.changeThemeSetting(value as string),
