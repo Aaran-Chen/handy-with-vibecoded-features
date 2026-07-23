@@ -110,6 +110,46 @@ fn create_client(provider: &PostProcessProvider, api_key: &str) -> Result<reqwes
         .map_err(|e| format!("Failed to build HTTP client: {}", e))
 }
 
+/// Fire-and-forget model warm-up for local OpenAI-compatible servers
+/// (Ollama). Hitting `/api/generate` with no prompt loads the model into
+/// memory and pins it for `keep_alive`, so the real cleanup request after the
+/// user stops speaking never pays the cold-load (which can dwarf inference on
+/// a 7B model). No-op for non-local base URLs — remote APIs have nothing to
+/// warm — and failures are logged and swallowed.
+pub fn warm_local_model(base_url: &str, model: &str) {
+    if model.trim().is_empty()
+        || !(base_url.contains("localhost") || base_url.contains("127.0.0.1"))
+    {
+        return;
+    }
+    // "http://localhost:11434/v1" -> "http://localhost:11434/api/generate"
+    let root = base_url
+        .trim_end_matches('/')
+        .trim_end_matches("/v1")
+        .trim_end_matches('/')
+        .to_string();
+    let model = model.to_string();
+    tauri::async_runtime::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+        {
+            Ok(client) => client,
+            Err(_) => return,
+        };
+        let body = serde_json::json!({ "model": model, "keep_alive": "30m" });
+        match client
+            .post(format!("{root}/api/generate"))
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(response) => log::debug!("Cleanup model warm-up: HTTP {}", response.status()),
+            Err(e) => log::debug!("Cleanup model warm-up failed (non-fatal): {e}"),
+        }
+    });
+}
+
 /// Send a chat completion request to an OpenAI-compatible API
 /// Returns Ok(Some(content)) on success, Ok(None) if response has no content,
 /// or Err on actual errors (HTTP, parsing, etc.)
