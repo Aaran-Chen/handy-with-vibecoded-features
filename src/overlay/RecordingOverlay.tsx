@@ -272,8 +272,8 @@ const RecordingOverlay: React.FC = () => {
       const dx = targetX - (r.left + r.width / 2);
       const dy = targetY - (r.top + r.height / 2);
       el.style.transition =
-        `transform 420ms cubic-bezier(0.6, -0.15, 0.9, 0.45) ${i * 50}ms, ` +
-        `opacity 340ms ease-in ${i * 50 + 90}ms`;
+        `transform 560ms cubic-bezier(0.6, -0.15, 0.9, 0.45) ${i * 66}ms, ` +
+        `opacity 455ms ease-in ${i * 66 + 120}ms`;
       el.style.transform = `perspective(300px) translate(${dx}px, ${dy}px) rotateX(40deg) scale(0.04)`;
       el.style.opacity = "0";
     });
@@ -282,11 +282,11 @@ const RecordingOverlay: React.FC = () => {
     // lines stay visible as the box collapses around them.
     setAbsorbed(true);
     setClosing(true);
-    const total = Math.min(420 + lineRefs.current.length * 50 + 120, 950);
+    const total = Math.min(560 + lineRefs.current.length * 66 + 160, 1270);
     const timer = setTimeout(() => {
       setClosing(false);
       setStarPulse(true);
-      setTimeout(() => setStarPulse(false), 400);
+      setTimeout(() => setStarPulse(false), 535);
     }, total);
     return () => clearTimeout(timer);
   }, [workingNow, lines.length, editing]);

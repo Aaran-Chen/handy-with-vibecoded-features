@@ -202,6 +202,9 @@
    star as the box closes around them. */
 .scard.closing .stext {
   opacity: 1;
+  /* Slowed to match the 75%-speed flight (560ms) without touching the
+     open/pop-in timing. */
+  transition: grid-template-rows 590ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .stext-clip {
   overflow: hidden;
@@ -436,7 +439,7 @@
   flex: none;
 }
 .sstar-wrap.absorb {
-  animation: sstar-absorb 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: sstar-absorb 505ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes sstar-absorb {
   0% {
