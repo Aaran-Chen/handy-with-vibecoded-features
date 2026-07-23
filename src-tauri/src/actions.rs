@@ -124,9 +124,12 @@ fn spawn_chunked_preview(app: AppHandle) {
     }
 
     std::thread::spawn(move || {
-        // Most recent audio window per pass. Bounds the per-pass engine time
-        // (and therefore how long the final transcription can be blocked).
-        const WINDOW_SAMPLES: usize = 16_000 * 10;
+        // Most recent audio window per pass. Matches the preview buffer bound,
+        // so in practice every pass covers the whole dictation and the preview
+        // never truncates to a sliding tail (earlier words vanishing mid-talk).
+        // Passes are self-paced, so long dictations just refresh less often —
+        // on a GPU, 90s of audio still transcribes in around a second.
+        const WINDOW_SAMPLES: usize = 16_000 * 90;
         const MIN_SAMPLES: usize = 16_000 * 4 / 5; // ~0.8s before first pass
         const MIN_GROWTH: usize = 16_000 / 3; // re-pass only after ~0.3s more audio
 
@@ -819,6 +822,19 @@ impl ShortcutAction for TranscribeAction {
         // adds no keypress latency.
         if self.wants_post_process(app) {
             crate::app_context::refresh_async();
+
+            // Warm the local cleanup model while the user is still speaking so
+            // the post-processing request after stop never pays the cold-load
+            // (Ollama unloads idle models after a few minutes by default).
+            let settings = get_settings(app);
+            if let Some(provider) = settings.active_post_process_provider() {
+                let model = settings
+                    .post_process_models
+                    .get(&provider.id)
+                    .cloned()
+                    .unwrap_or_default();
+                crate::llm_client::warm_local_model(&provider.base_url, &model);
+            }
         }
 
         // Load model in the background

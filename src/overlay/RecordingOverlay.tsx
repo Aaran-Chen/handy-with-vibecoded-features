@@ -148,9 +148,13 @@ const RecordingOverlay: React.FC = () => {
     if (!measurer || !cap) {
       return;
     }
-    const committed = streamText.committed;
-    const joiner = committed && streamText.tentative ? " " : "";
-    const full = `${committed}${joiner}${streamText.tentative}`;
+    // Engines can emit newlines and doubled spaces mid-transcript (Whisper
+    // does after pauses); collapse all whitespace so a stray "\n" can't
+    // render as a phantom line break inside a measured line.
+    const committed = streamText.committed.replace(/\s+/g, " ").trim();
+    const tentative = streamText.tentative.replace(/\s+/g, " ").trim();
+    const joiner = committed && tentative ? " " : "";
+    const full = `${committed}${joiner}${tentative}`;
     const maxWidth = cap.clientWidth - 4;
     const words = full.length ? full.split(" ") : [];
     const next: { text: string; tentativeFrom: number | null }[] = [];
