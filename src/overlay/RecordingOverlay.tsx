@@ -60,6 +60,10 @@ const RecordingOverlay: React.FC = () => {
   // `absorbed` marks the text as merged (panel may collapse to the pill);
   // `starPulse` drives the star's swell as the text lands in it.
   const [absorbed, setAbsorbed] = useState(false);
+  // True while the fly-into-the-star animation is playing: the panel starts
+  // shrinking immediately (absorbed) but the text must stay visible in
+  // flight, so this suppresses the region's opacity fade until landing.
+  const [closing, setClosing] = useState(false);
   const [starPulse, setStarPulse] = useState(false);
   const starRef = useRef<HTMLSpanElement>(null);
   const prevWorkingRef = useRef(false);
@@ -106,6 +110,7 @@ const RecordingOverlay: React.FC = () => {
         setIsVisible(false);
         setEditing(false);
         setAbsorbed(false);
+        setClosing(false);
       });
 
       const unlistenLevel = await listen<number[]>("mic-level", (event) => {
@@ -242,6 +247,7 @@ const RecordingOverlay: React.FC = () => {
     pinnedRef.current = true;
     setOverflowing(false);
     setAbsorbed(false);
+    setClosing(false);
   }, [session]);
 
   // Stop-collapse: entering the working phase with text on screen sends each
@@ -271,9 +277,14 @@ const RecordingOverlay: React.FC = () => {
       el.style.transform = `perspective(300px) translate(${dx}px, ${dy}px) rotateX(40deg) scale(0.04)`;
       el.style.opacity = "0";
     });
+    // The panel shrinks WITH the flight, not after it: absorbed closes the
+    // grid row now, while `closing` keeps the region's opacity up so the
+    // lines stay visible as the box collapses around them.
+    setAbsorbed(true);
+    setClosing(true);
     const total = Math.min(420 + lineRefs.current.length * 50 + 120, 950);
     const timer = setTimeout(() => {
-      setAbsorbed(true);
+      setClosing(false);
       setStarPulse(true);
       setTimeout(() => setStarPulse(false), 400);
     }, total);
@@ -403,8 +414,8 @@ const RecordingOverlay: React.FC = () => {
         <div
           key={session}
           className={`scard ${open ? "open" : ""} ${collapsed ? "working" : ""} ${
-            isVisible ? "" : "leaving"
-          }`}
+            closing ? "closing" : ""
+          } ${isVisible ? "" : "leaving"}`}
         >
           <div className="stext">
             <div className="stext-clip">

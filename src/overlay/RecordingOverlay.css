@@ -197,6 +197,12 @@
   grid-template-rows: 1fr;
   opacity: 1;
 }
+/* While the stop-collapse plays, the grid row shrinks (not .open anymore) but
+   the region must NOT fade — the lines are still visibly flying into the
+   star as the box closes around them. */
+.scard.closing .stext {
+  opacity: 1;
+}
 .stext-clip {
   overflow: hidden;
   min-height: 0;
