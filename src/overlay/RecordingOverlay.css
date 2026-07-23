@@ -423,6 +423,29 @@
 }
 
 /* working state (transcribing / polishing) — spinning star + label */
+/* Wrapper for the absorb pulse: it animates scale on its own element so it
+   never fights the star's spin animation (both would target transform). */
+.sstar-wrap {
+  display: inline-flex;
+  flex: none;
+}
+.sstar-wrap.absorb {
+  animation: sstar-absorb 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes sstar-absorb {
+  0% {
+    transform: scale(1);
+    filter: none;
+  }
+  35% {
+    transform: scale(1.55);
+    filter: drop-shadow(0 0 8px var(--s-accent));
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
 .sstar {
   font-size: 13px;
   line-height: 1;

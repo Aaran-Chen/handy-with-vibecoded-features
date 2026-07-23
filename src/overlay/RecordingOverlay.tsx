@@ -55,6 +55,14 @@ const RecordingOverlay: React.FC = () => {
   >([]);
   const measureRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Stop-collapse animation: when recording ends, each preview line flies
+  // into the spinning star (bottom-left) and the panel closes behind it.
+  // `absorbed` marks the text as merged (panel may collapse to the pill);
+  // `starPulse` drives the star's swell as the text lands in it.
+  const [absorbed, setAbsorbed] = useState(false);
+  const [starPulse, setStarPulse] = useState(false);
+  const starRef = useRef<HTMLSpanElement>(null);
+  const prevWorkingRef = useRef(false);
 
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   // Live-text scroll-back: the text region "sticks" to the newest line while the
@@ -97,6 +105,7 @@ const RecordingOverlay: React.FC = () => {
       const unlistenHide = await listen("hide-overlay", () => {
         setIsVisible(false);
         setEditing(false);
+        setAbsorbed(false);
       });
 
       const unlistenLevel = await listen<number[]>("mic-level", (event) => {
@@ -227,11 +236,49 @@ const RecordingOverlay: React.FC = () => {
     applyDrum();
   }, [lines]);
 
-  // Each fresh streaming session starts pinned to the bottom, fade cleared.
+  // Each fresh streaming session starts pinned to the bottom, fade cleared,
+  // with any previous stop-collapse forgotten.
   useEffect(() => {
     pinnedRef.current = true;
     setOverflowing(false);
+    setAbsorbed(false);
   }, [session]);
+
+  // Stop-collapse: entering the working phase with text on screen sends each
+  // line flying into the star — staggered oldest-first so the text pours in —
+  // then marks it absorbed (closing the panel) and pulses the star.
+  const workingNow = state === "streaming" && phase === "working";
+  useEffect(() => {
+    const was = prevWorkingRef.current;
+    prevWorkingRef.current = workingNow;
+    if (!workingNow || was) return;
+    const star = starRef.current;
+    if (!star || lines.length === 0 || editing) {
+      setAbsorbed(true);
+      return;
+    }
+    const starRect = star.getBoundingClientRect();
+    const targetX = starRect.left + starRect.width / 2;
+    const targetY = starRect.top + starRect.height / 2;
+    lineRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const dx = targetX - (r.left + r.width / 2);
+      const dy = targetY - (r.top + r.height / 2);
+      el.style.transition =
+        `transform 420ms cubic-bezier(0.6, -0.15, 0.9, 0.45) ${i * 50}ms, ` +
+        `opacity 340ms ease-in ${i * 50 + 90}ms`;
+      el.style.transform = `perspective(300px) translate(${dx}px, ${dy}px) rotateX(40deg) scale(0.04)`;
+      el.style.opacity = "0";
+    });
+    const total = Math.min(420 + lineRefs.current.length * 50 + 120, 950);
+    const timer = setTimeout(() => {
+      setAbsorbed(true);
+      setStarPulse(true);
+      setTimeout(() => setStarPulse(false), 400);
+    }, total);
+    return () => clearTimeout(timer);
+  }, [workingNow, lines.length, editing]);
 
   // Re-pin when the user is within ~a line of the bottom; unpin otherwise.
   // Scrolling also re-solves the drum so lines rotate through the wheel live.
@@ -324,8 +371,15 @@ const RecordingOverlay: React.FC = () => {
   const workingRow = (label: string, showCancel: boolean) => (
     <div className="sbase">
       <div className="sbase-l">
-        <span className="sstar" aria-hidden="true">
-          {"✦"}
+        {/* The pulse animates the wrapper's scale so it can't fight the
+            star's own spin animation (both would target transform). */}
+        <span
+          className={`sstar-wrap ${starPulse ? "absorb" : ""}`}
+          ref={starRef}
+        >
+          <span className="sstar" aria-hidden="true">
+            {"✦"}
+          </span>
         </span>
       </div>
       <span className="swork-label">{label}</span>
@@ -338,12 +392,11 @@ const RecordingOverlay: React.FC = () => {
     const hasText =
       streamText.committed.length > 0 || streamText.tentative.length > 0;
     const working = phase === "working";
-    // Keep the panel open whenever there's text — even while finalizing — so the
-    // transcript stays put under a working spinner instead of collapsing and
-    // squishing the text mid-stream. Only fall back to the small working pill
-    // when there was no text to preserve.
-    const open = hasText;
-    const collapsed = working && !hasText;
+    // Keep the panel open while there's text — the stop-collapse animation
+    // plays over it — then fall to the small working pill once the lines have
+    // been absorbed into the star (or there was no text to begin with).
+    const open = hasText && !absorbed;
+    const collapsed = working && (!hasText || absorbed);
 
     return (
       <div dir={direction} className={`ov-stage ${position}`}>
