@@ -155,7 +155,11 @@ const RecordingOverlay: React.FC = () => {
     const tentative = streamText.tentative.replace(/\s+/g, " ").trim();
     const joiner = committed && tentative ? " " : "";
     const full = `${committed}${joiner}${tentative}`;
-    const maxWidth = cap.clientWidth - 4;
+    // clientWidth includes the cap's horizontal padding (14px each side),
+    // which the text does not get; budget it out, plus slack for the caret.
+    // Overshooting here makes the browser wrap inside a measured line,
+    // stranding single words on their own rows.
+    const maxWidth = cap.clientWidth - 34;
     const words = full.length ? full.split(" ") : [];
     const next: { text: string; tentativeFrom: number | null }[] = [];
     let line = "";
